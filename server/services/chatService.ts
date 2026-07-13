@@ -75,6 +75,7 @@ export function createMessage(
   currentUserId: string,
   imageUrl?: string,
   fileName?: string,
+  call?: Message["call"],
 ): { message: Message; conversation: Conversation } | null {
   const conv = db.conversations.find((c) => c.id === conversationId);
   if (!conv) return null;
@@ -92,11 +93,12 @@ export function createMessage(
     seq: db.messageSeq,
     ...(imageUrl ? { imageUrl } : {}),
     ...(fileName ? { fileName } : {}),
+    ...(call ? { call } : {}),
   };
   db.messages.push(message);
 
-  // 更新会话的最后消息与时间（图片消息显示 📷 占位）
-  const preview = imageUrl ? "📷 Photo" : text;
+  // 更新会话的最后消息与时间（图片消息显示 📷 占位，通话消息显示 📞 占位）
+  const preview = imageUrl ? "📷 Photo" : call ? "📞 Call" : text;
   conv.lastMessage = isSent ? preview : `${conv.name.split(" ")[0]}: ${preview}`;
   conv.lastTime = relativeTime();
 
@@ -129,9 +131,15 @@ export function createRecipientMessage(
   seq: number,
   imageUrl?: string,
   fileName?: string,
+  call?: Message["call"],
 ): { message: Message; conversation: Conversation } | null {
   const conv = db.conversations.find((c) => c.id === recipientConversationId);
   if (!conv) return null;
+
+  // 接收方视角的通话记录 — isCaller 取反
+  const recipientCall = call
+    ? { ...call, isCaller: !call.isCaller }
+    : undefined;
 
   const message: Message = {
     id: nanoid(8),
@@ -144,11 +152,12 @@ export function createRecipientMessage(
     seq,
     ...(imageUrl ? { imageUrl } : {}),
     ...(fileName ? { fileName } : {}),
+    ...(recipientCall ? { call: recipientCall } : {}),
   };
   db.messages.push(message);
 
-  // 更新接收方会话最后消息与未读数（图片消息显示 📷 占位）
-  const preview = imageUrl ? "📷 Photo" : text;
+  // 更新接收方会话最后消息与未读数（图片消息显示 📷 占位，通话消息显示 📞 占位）
+  const preview = imageUrl ? "📷 Photo" : call ? "📞 Call" : text;
   conv.lastMessage = `${senderName.split(" ")[0]}: ${preview}`;
   conv.lastTime = relativeTime();
   conv.unreadCount = (conv.unreadCount ?? 0) + 1;

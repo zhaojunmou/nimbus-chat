@@ -283,6 +283,13 @@ export const en = {
     groupNotSupported: "Voice calls are not supported in group chats yet.",
     micPermissionDenied: "Microphone access denied. Please grant permission in browser settings.",
     micUnavailable: "Microphone unavailable — listen only mode",
+    redial: "Call back",
+    recordOutgoing: "Outgoing call",
+    recordIncoming: "Incoming call",
+    recordRejected: "Call declined",
+    recordMissed: "Missed call",
+    recordFailed: "Call failed",
+    recordBusy: "Call busy",
   },
   settings: {
     title: "Settings",

@@ -14,7 +14,7 @@ import {
 import { Avatar } from "@/components/Avatar";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store";
-import { useCallStore } from "@/callStore";
+import { useCallStore, type CallStatus } from "@/callStore";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,6 +45,7 @@ export default function VoiceCall() {
   const startOutgoingCall = useCallStore((s) => s.startOutgoingCall);
   const endCall = useCallStore((s) => s.endCall);
   const toggleMute = useCallStore((s) => s.toggleMute);
+  const resetCallState = useCallStore((s) => s.resetCallState);
 
   const [seconds, setSeconds] = useState(0);
   const startedRef = useRef(false);
@@ -89,14 +90,20 @@ export default function VoiceCall() {
   }, [callStatus]);
 
   // 通话结束/拒绝/失败 → 自动返回聊天页
+  // 用 ref 防止重复导航（callStatus 变化不会重新触发已完成的导航）
+  const navTriggeredRef = useRef(false);
   useEffect(() => {
     if (
-      callStatus === "ended" ||
-      callStatus === "rejected" ||
-      callStatus === "failed"
+      (callStatus === "ended" ||
+        callStatus === "rejected" ||
+        callStatus === "failed") &&
+      !navTriggeredRef.current
     ) {
+      navTriggeredRef.current = true;
       const targetConvId = id ?? callConvId ?? "";
       const timer = setTimeout(() => {
+        // 先重置通话状态，再导航
+        resetCallState();
         if (targetConvId) {
           navigate(`/chat/${targetConvId}`, { replace: true });
         } else {
@@ -105,7 +112,7 @@ export default function VoiceCall() {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [callStatus, id, callConvId, navigate]);
+  }, [callStatus, id, callConvId, navigate, resetCallState]);
 
   const conv = storeConv;
   const displayName = peerName ?? conv?.name ?? t("call.unknown");
@@ -146,8 +153,13 @@ export default function VoiceCall() {
   };
 
   const handleBack = () => {
-    // 通话中返回聊天页（不挂断）
+    // 返回聊天页 — 如果通话已结束/拒绝/失败，重置状态
+    const inactiveStates: CallStatus[] = ["ended", "rejected", "failed", "idle"];
+    if (inactiveStates.includes(callStatus)) {
+      resetCallState();
+    }
     if (id) navigate(`/chat/${id}`);
+    else navigate("/", { replace: true });
   };
 
   return (

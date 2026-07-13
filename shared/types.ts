@@ -51,6 +51,15 @@ export interface Message {
   imageUrl?: string;
   /** 文件名（图片消息的原始文件名，用于下载/提示） */
   fileName?: string;
+  /** 通话记录 — 存在时渲染为通话记录卡片 */
+  call?: {
+    /** 通话结果状态 */
+    status: "completed" | "rejected" | "missed" | "failed" | "busy";
+    /** 通话时长（秒）— 仅 completed 有意义 */
+    duration?: number;
+    /** 是否为发起方 */
+    isCaller: boolean;
+  };
 }
 
 /** 联系人 */
@@ -182,6 +191,7 @@ export interface ClientToServerEvents {
     text: string;
     imageUrl?: string;
     fileName?: string;
+    call?: Message["call"];
   }) => void;
   // 标记已读
   "message:read": (conversationId: string) => void;

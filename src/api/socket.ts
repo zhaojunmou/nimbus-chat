@@ -179,8 +179,9 @@ export function sendMessage(
   text: string,
   imageUrl?: string,
   fileName?: string,
+  call?: import("../../shared/types").Message["call"],
 ) {
-  connectSocket().emit("message:send", { conversationId, text, imageUrl, fileName });
+  connectSocket().emit("message:send", { conversationId, text, imageUrl, fileName, call });
 }
 
 export function emitRead(conversationId: string) {

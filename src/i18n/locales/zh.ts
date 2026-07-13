@@ -280,6 +280,13 @@ export const zh: Translations = {
     groupNotSupported: "群聊暂不支持语音通话。",
     micPermissionDenied: "麦克风访问被拒绝，请在浏览器设置中授权。",
     micUnavailable: "麦克风不可用 — 仅收听模式",
+    redial: "再次呼叫",
+    recordOutgoing: "去电",
+    recordIncoming: "来电",
+    recordRejected: "已拒接",
+    recordMissed: "未接来电",
+    recordFailed: "通话失败",
+    recordBusy: "对方忙线",
   },
   settings: {
     title: "设置",

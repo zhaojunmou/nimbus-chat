@@ -5,6 +5,7 @@ import {
   emitCallIceCandidate,
   emitCallReject,
   emitCallEnd,
+  sendMessage,
 } from "./api/socket";
 
 /**
@@ -57,6 +58,8 @@ interface CallState {
   rejectIncomingCall: () => void;
   endCall: () => void;
   toggleMute: () => void;
+  /** 完全重置通话状态 — 由 UI 在导航后调用 */
+  resetCallState: () => void;
 
   // ── 信令回调（由 socket 订阅调用） ──
   onIncomingOffer: (data: IncomingCallData) => void;
@@ -76,6 +79,10 @@ let localStream: MediaStream | null = null;
 let remoteStream: MediaStream | null = null;
 // 呼叫超时定时器 — 30s 无响应自动结束
 let callTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+// 通话接通时间戳（用于计算时长）— null 表示未接通
+let callStartTime: number | null = null;
+// 是否为呼叫方（发起方）— 用于决定谁发送通话记录
+let isCaller: boolean = false;
 
 function clearCallTimeout() {
   if (callTimeoutTimer) {
@@ -206,6 +213,41 @@ function cleanupWebRTC() {
     localStream = null;
   }
   remoteStream = null;
+  // 重置通话记录相关变量
+  callStartTime = null;
+  isCaller = false;
+}
+
+/** 发送通话记录消息到聊天会话 — 仅呼叫方调用 */
+function sendCallRecord(finalStatus: CallStatus) {
+  const { conversationId } = useCallStore.getState();
+  if (!conversationId) return;
+
+  let callStatus: "completed" | "rejected" | "missed" | "failed" | "busy";
+  let duration: number | undefined;
+
+  if (callStartTime !== null) {
+    // 曾接通过 → completed
+    callStatus = "completed";
+    duration = Math.floor((Date.now() - callStartTime) / 1000);
+  } else if (finalStatus === "rejected") {
+    callStatus = "rejected";
+  } else if (finalStatus === "failed") {
+    callStatus = "failed";
+  } else {
+    // ended 但未接通 → missed（呼叫方取消或对方未接听）
+    callStatus = "missed";
+  }
+
+  try {
+    sendMessage(conversationId, "", undefined, undefined, {
+      status: callStatus,
+      duration,
+      isCaller,
+    });
+  } catch (err) {
+    console.warn("[call] sendCallRecord failed:", err);
+  }
 }
 
 /** 播放远端音频 — 创建一个隐藏的 <audio> 元素 */
@@ -251,8 +293,9 @@ export const useCallStore = create<CallState>((set, get) => ({
 
   // ── 发起通话（呼叫方） ──
   startOutgoingCall: async (peerId, peerName, conversationId) => {
-    // 如果已有通话在进行，拒绝新通话
-    if (get().status !== "idle" && get().status !== "ended") {
+    // 仅在无活跃通话时允许发起（idle/ended/rejected/failed 都算无活跃）
+    const activeStates: CallStatus[] = ["calling", "incoming", "connecting", "connected"];
+    if (activeStates.includes(get().status)) {
       console.warn("[call] cannot start: call already in progress");
       return;
     }
@@ -265,14 +308,23 @@ export const useCallStore = create<CallState>((set, get) => ({
       remoteReady: false,
       micAvailable: true,
     });
+    isCaller = true;
+    callStartTime = null;
     startCallTimeout();
 
     try {
       const stream = await getLocalAudioStream();
+      // 检查状态是否还是 calling — 如果不是，说明用户已挂断或被拒
+      if (get().status !== "calling") {
+        console.log("[call] startOutgoingCall aborted: status changed after getUserMedia");
+        if (stream && localStream === stream) localStream = null;
+        return;
+      }
       pc = createPeerConnection(
         (candidate) => emitCallIceCandidate(peerId, candidate),
         (remote) => {
           playRemoteAudio(remote);
+          callStartTime = Date.now();
           set({ status: "connected", remoteReady: true });
         },
       );
@@ -289,11 +341,25 @@ export const useCallStore = create<CallState>((set, get) => ({
       }
       // 创建 offer → 设置本地描述 → 发送给对方
       const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      if (get().status !== "calling") {
+        console.log("[call] startOutgoingCall aborted: status changed after createOffer");
+        cleanupWebRTC();
+        return;
+      }
       await pc.setLocalDescription(offer);
+      if (get().status !== "calling") {
+        console.log("[call] startOutgoingCall aborted: status changed before emit");
+        cleanupWebRTC();
+        return;
+      }
       emitCallOffer(peerId, conversationId, offer);
     } catch (err) {
       console.error("[call] startOutgoingCall failed:", err);
-      set({ status: "failed" });
+      // 仅在状态还是 calling 时才设为 failed — 避免覆盖已结束/已拒绝的状态
+      if (get().status === "calling") {
+        set({ status: "failed" });
+        sendCallRecord("failed");
+      }
       cleanupWebRTC();
     }
   },
@@ -306,13 +372,21 @@ export const useCallStore = create<CallState>((set, get) => ({
       return;
     }
     set({ status: "connecting", incomingOffer: null, micAvailable: true });
+    isCaller = false;
+    callStartTime = null;
 
     try {
       const stream = await getLocalAudioStream();
+      if (get().status !== "connecting") {
+        console.log("[call] acceptIncomingCall aborted: status changed after getUserMedia");
+        if (stream && localStream === stream) localStream = null;
+        return;
+      }
       pc = createPeerConnection(
         (candidate) => emitCallIceCandidate(peerId, candidate),
         (remote) => {
           playRemoteAudio(remote);
+          callStartTime = Date.now();
           set({ status: "connected", remoteReady: true });
         },
       );
@@ -325,12 +399,29 @@ export const useCallStore = create<CallState>((set, get) => ({
       }
       // 设置远端 offer → 创建 answer → 设置本地描述 → 发送 answer
       await pc.setRemoteDescription(incomingOffer.offer);
+      if (get().status !== "connecting") {
+        console.log("[call] acceptIncomingCall aborted: status changed after setRemoteDescription");
+        cleanupWebRTC();
+        return;
+      }
       const answer = await pc.createAnswer();
+      if (get().status !== "connecting") {
+        console.log("[call] acceptIncomingCall aborted: status changed after createAnswer");
+        cleanupWebRTC();
+        return;
+      }
       await pc.setLocalDescription(answer);
+      if (get().status !== "connecting") {
+        console.log("[call] acceptIncomingCall aborted: status changed before emit");
+        cleanupWebRTC();
+        return;
+      }
       emitCallAnswer(peerId, answer);
     } catch (err) {
       console.error("[call] acceptIncomingCall failed:", err);
-      set({ status: "failed" });
+      if (get().status === "connecting") {
+        set({ status: "failed" });
+      }
       cleanupWebRTC();
     }
   },
@@ -364,13 +455,18 @@ export const useCallStore = create<CallState>((set, get) => ({
   // ── 挂断通话 ──
   endCall: () => {
     const { peerId, status } = get();
-    // 通知对方挂断（仅在通话中状态才发送）
-    if (peerId && status !== "idle" && status !== "ended" && status !== "rejected") {
+    // 通知对方挂断（仅在活跃通话状态才发送）
+    const activeStates: CallStatus[] = ["calling", "incoming", "connecting", "connected"];
+    if (peerId && activeStates.includes(status)) {
       try {
         emitCallEnd(peerId);
       } catch (err) {
         console.warn("[call] emitCallEnd failed:", err);
       }
+    }
+    // 呼叫方负责发送通话记录（被叫方不发送，避免重复）
+    if (isCaller) {
+      sendCallRecord("ended");
     }
     // 先更新状态 — 确保 UI 立即响应，不被后续清理中断
     set({
@@ -381,17 +477,23 @@ export const useCallStore = create<CallState>((set, get) => ({
     // 再清理资源（即使失败也不影响状态）
     cleanupWebRTC();
     removeAudioEl();
-    // 短暂延迟后重置为 idle，让 UI 有时间显示"通话已结束"
-    setTimeout(() => {
-      if (get().status === "ended") {
-        set({
-          status: "idle",
-          peerId: null,
-          peerName: null,
-          conversationId: null,
-        });
-      }
-    }, 1500);
+    // 不在此处自动重置为 idle — 由 UI（VoiceCall）导航后调用 resetCallState
+  },
+
+  // ── 完全重置通话状态 ──
+  resetCallState: () => {
+    cleanupWebRTC();
+    removeAudioEl();
+    set({
+      status: "idle",
+      peerId: null,
+      peerName: null,
+      conversationId: null,
+      incomingOffer: null,
+      muted: false,
+      remoteReady: false,
+      micAvailable: true,
+    });
   },
 
   // ── 切换静音 ──
@@ -408,8 +510,13 @@ export const useCallStore = create<CallState>((set, get) => ({
   // 收到来电
   onIncomingOffer: (data) => {
     const current = get().status;
-    // 如果正在通话中，自动拒绝（忙线）
-    if (current === "connected" || current === "connecting" || current === "calling") {
+    // 如果正在通话中或已有来电在显示，自动拒绝（忙线）
+    if (
+      current === "connected" ||
+      current === "connecting" ||
+      current === "calling" ||
+      current === "incoming"
+    ) {
       emitCallReject(data.from);
       return;
     }
@@ -456,21 +563,16 @@ export const useCallStore = create<CallState>((set, get) => ({
     // 同一时间只会有一个通话 — 不检查 from，避免 userId 不匹配导致事件被丢弃
     if (status === "idle" || status === "ended" || status === "rejected") return;
     console.log("[call] remote rejected");
+    // 呼叫方发送通话记录（被叫方拒接，呼叫方记录为 rejected）
+    if (isCaller) {
+      sendCallRecord("rejected");
+    }
     // 先更新状态
     set({ status: "rejected" });
     // 再清理资源
     cleanupWebRTC();
     removeAudioEl();
-    setTimeout(() => {
-      if (get().status === "rejected") {
-        set({
-          status: "idle",
-          peerId: null,
-          peerName: null,
-          conversationId: null,
-        });
-      }
-    }, 1500);
+    // 不自动重置 — 由 UI 导航后调用 resetCallState
   },
 
   // 对方挂断
@@ -478,20 +580,15 @@ export const useCallStore = create<CallState>((set, get) => ({
     const { status } = get();
     if (status === "idle" || status === "ended" || status === "rejected") return;
     console.log("[call] remote ended");
+    // 呼叫方发送通话记录（被叫方挂断，呼叫方记录）
+    if (isCaller) {
+      sendCallRecord("ended");
+    }
     // 先更新状态
     set({ status: "ended" });
     // 再清理资源
     cleanupWebRTC();
     removeAudioEl();
-    setTimeout(() => {
-      if (get().status === "ended") {
-        set({
-          status: "idle",
-          peerId: null,
-          peerName: null,
-          conversationId: null,
-        });
-      }
-    }, 1500);
+    // 不自动重置 — 由 UI 导航后调用 resetCallState
   },
 }));

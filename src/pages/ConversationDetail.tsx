@@ -19,6 +19,10 @@ import {
   UserCircle,
   Smile,
   X,
+  Phone,
+  PhoneMissed,
+  PhoneIncoming,
+  PhoneOutgoing,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { Avatar } from "@/components/Avatar";
@@ -294,6 +298,128 @@ export default function ConversationDetail() {
                 i > 0 && convMessages[i - 1].isSent === m.isSent;
               // 图片消息渲染
               const isImageMsg = !!m.imageUrl;
+              // 通话记录渲染 — 跟普通消息一样按 isSent 左右对齐
+              if (m.call) {
+                const call = m.call;
+                const isMissed = call.status === "missed";
+                const isRejected = call.status === "rejected";
+                const isFailed = call.status === "failed";
+                const isCompleted = call.status === "completed";
+                // 图标选择
+                const CallIcon = isMissed || isFailed
+                  ? PhoneMissed
+                  : call.isCaller
+                    ? PhoneOutgoing
+                    : PhoneIncoming;
+                // 状态文案
+                const statusText = (() => {
+                  switch (call.status) {
+                    case "completed":
+                      return call.isCaller
+                        ? t("call.recordOutgoing")
+                        : t("call.recordIncoming");
+                    case "rejected":
+                      return t("call.recordRejected");
+                    case "missed":
+                      return t("call.recordMissed");
+                    case "failed":
+                      return t("call.recordFailed");
+                    case "busy":
+                      return t("call.recordBusy");
+                    default:
+                      return t("call.recordMissed");
+                  }
+                })();
+                // 时长格式化
+                const formatDuration = (sec?: number) => {
+                  if (!sec) return "";
+                  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+                  const ss = String(sec % 60).padStart(2, "0");
+                  return `${mm}:${ss}`;
+                };
+                // 卡片内容
+                const card = (
+                  <button
+                    type="button"
+                    onClick={() => conv && navigate(`/call/${conv.id}`)}
+                    className="group flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--radius-10)] border border-border-neutral-2 bg-bg-surface hover:bg-[var(--bg-overlay-l2)] cursor-pointer transition-colors duration-150 max-w-[80%]"
+                    aria-label={t("call.redial")}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0",
+                        isMissed || isFailed
+                          ? "bg-status-error/15 text-status-error"
+                          : isRejected
+                            ? "bg-amber-500/15 text-amber-500"
+                            : "bg-brand/15 text-brand",
+                      )}
+                    >
+                      <CallIcon size={15} />
+                    </span>
+                    <div className="flex flex-col items-start min-w-0">
+                      <span
+                        className={cn(
+                          "text-[12px] font-medium truncate",
+                          isMissed || isFailed
+                            ? "text-status-error"
+                            : isRejected
+                              ? "text-amber-500"
+                              : "text-text-default",
+                        )}
+                      >
+                        {statusText}
+                      </span>
+                      <span className="text-[10px] text-text-tertiary flex items-center gap-1.5">
+                        {isCompleted && call.duration ? (
+                          <span className="font-mono tnum">{formatDuration(call.duration)}</span>
+                        ) : null}
+                        <span>{m.timestamp}</span>
+                      </span>
+                    </div>
+                    <Phone
+                      size={14}
+                      className="text-text-tertiary group-hover:text-brand transition-colors flex-shrink-0"
+                    />
+                  </button>
+                );
+                // 发送方 → 右对齐
+                if (m.isSent) {
+                  return (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        "flex flex-row-reverse items-start gap-2 animate-fade-in",
+                        prevSame ? "mt-1" : "mt-3",
+                      )}
+                    >
+                      {card}
+                    </div>
+                  );
+                }
+                // 接收方 → 左对齐 + 头像
+                return (
+                  <div
+                    key={m.id}
+                    className={cn(
+                      "flex items-start gap-2 animate-fade-in",
+                      prevSame ? "mt-1" : "mt-3",
+                    )}
+                  >
+                    <div className="w-8 flex-shrink-0">
+                      {!prevSame && (
+                        <Avatar
+                          initials={conv.initials}
+                          color={conv.color}
+                          size="md"
+                          imageUrl={conv.avatarUrl}
+                        />
+                      )}
+                    </div>
+                    {card}
+                  </div>
+                );
+              }
               if (m.isSent) {
                 return (
                   <div

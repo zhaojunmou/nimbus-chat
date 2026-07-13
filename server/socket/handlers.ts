@@ -66,8 +66,8 @@ export function registerSocketHandlers(io: IO) {
     });
 
     // 发送消息 → 持久化并广播给房间
-    socket.on("message:send", ({ conversationId, text, imageUrl, fileName }) => {
-      const result = svc.createMessage(conversationId, userId, text, userId, imageUrl, fileName);
+    socket.on("message:send", ({ conversationId, text, imageUrl, fileName, call }) => {
+      const result = svc.createMessage(conversationId, userId, text, userId, imageUrl, fileName, call);
       if (!result) return;
       const senderMsg = result.message;
       const senderConv = result.conversation;
@@ -102,6 +102,7 @@ export function registerSocketHandlers(io: IO) {
             senderMsg.seq ?? 0,
             imageUrl,
             fileName,
+            call,
           );
           if (memberResult) {
             io.to(`user:${memberId}`).emit("message:new", memberResult.message);
@@ -124,6 +125,7 @@ export function registerSocketHandlers(io: IO) {
           senderMsg.seq ?? 0,
           imageUrl,
           fileName,
+          call,
         );
         if (recipientResult) {
           io.to(`user:${recipientId}`).emit("message:new", recipientResult.message);
