@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Trae design library tokens — Nimbus Chat dark theme
+ * 提取自设计稿，承载统一的色彩/字号/间距/圆角系统。
+ */
+:root {
+  /* radius */
+  --radius-2: 2px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-full: 9999px;
+
+  /* spacers */
+  --spacer-4: 4px;
+  --spacer-6: 6px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-24: 24px;
+  --spacer-32: 32px;
+  --spacer-40: 40px;
+
+  /* font family */
+  --font-family-default: "SF Pro Text", system-ui, -apple-system, sans-serif;
+  --font-family-heading: "SF Pro", system-ui, -apple-system, sans-serif;
+  --font-family-mono: "JetBrains Mono", monospace;
+
+  /* body */
+  --body-xs-font-size: 10px;
+  --body-sm-font-size: 11px;
+  --body-md-font-size: 12px;
+  --body-base-font-size: 13px;
+
+  /* heading */
+  --heading-3xs-font-size: 11px;
+  --heading-2xs-font-size: 12px;
+  --heading-xs-font-size: 13px;
+  --heading-sm-font-size: 16px;
+  --heading-md-font-size: 20px;
+  --heading-lg-font-size: 22px;
+  --heading-xl-font-size: 24px;
+
+  /* bg */
+  --bg-base-default: #1a1b1d;
+  --bg-base-secondary: #222427;
+  --bg-base-tertiary: #2a2d31;
+  --bg-overlay-l1: rgba(224, 226, 242, 0.04);
+  --bg-overlay-l2: rgba(224, 226, 242, 0.06);
+  --bg-overlay-l3: rgba(224, 226, 242, 0.08);
+  --bg-overlay-l4: rgba(224, 226, 242, 0.12);
+  --bg-menu: #202123;
+
+  /* bg-brand */
+  --bg-brand: #32f08c;
+  --bg-brand-hover: #0fdc78;
+  --bg-brand-popup: rgba(50, 240, 140, 0.12);
+
+  /* text */
+  --text-default: #d1d3db;
+  --text-default-hover: #f5f9fe;
+  --text-secondary: #9599a6;
+  --text-tertiary: #666b75;
+  --text-onbrand: #0c0c0d;
+
+  /* icon */
+  --icon-default: #d1d3db;
+  --icon-secondary: #9599a6;
+  --icon-tertiary: #666b75;
+
+  /* border */
+  --border-neutral-l1: rgba(224, 226, 242, 0.1);
+  --border-neutral-l2: rgba(224, 226, 242, 0.16);
+  --border-brand: #32f08c;
+  --border-error: rgba(246, 90, 90, 0.25);
+
+  /* accent (头像配色循环) */
+  --accent-teal: #2dd288;
+  --accent-coral: #ff9392;
+  --accent-amber: #dcb364;
+  --accent-cyan: #04cbe5;
+  --accent-violet: #bfa5ff;
+
+  /* status */
+  --status-primary-default: #387bff;
+  --status-error-default: #f65a5a;
+  --status-success-default: #33c192;
+
+  --color-background: var(--bg-base-default);
+  --color-foreground: var(--text-default);
+}
+
+/* 浅色主题 — 通过 <html data-theme="light"> 启用 */
+:root[data-theme="light"] {
+  --bg-base-default: #f7f8fa;
+  --bg-base-secondary: #ffffff;
+  --bg-base-tertiary: #eef0f3;
+  --bg-overlay-l1: rgba(20, 22, 26, 0.04);
+  --bg-overlay-l2: rgba(20, 22, 26, 0.06);
+  --bg-overlay-l3: rgba(20, 22, 26, 0.08);
+  --bg-overlay-l4: rgba(20, 22, 26, 0.12);
+  --bg-menu: #ffffff;
+
+  --bg-brand: #1bbf6a;
+  --bg-brand-hover: #15a85c;
+  --bg-brand-popup: rgba(27, 191, 106, 0.12);
+
+  --text-default: #1a1b1d;
+  --text-default-hover: #0c0c0d;
+  --text-secondary: #5a5f6a;
+  --text-tertiary: #8a8f99;
+  --text-onbrand: #ffffff;
+
+  --icon-default: #1a1b1d;
+  --icon-secondary: #5a5f6a;
+  --icon-tertiary: #8a8f99;
+
+  --border-neutral-l1: rgba(20, 22, 26, 0.08);
+  --border-neutral-l2: rgba(20, 22, 26, 0.14);
+  --border-brand: #1bbf6a;
+
+  --status-primary-default: #2b6cff;
+  --status-error-default: #e54848;
+  --status-success-default: #1ba978;
+}
+
+* {
+  border-color: var(--border-neutral-l1);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base-default);
+  color: var(--text-default);
+  font-family: var(--font-family-default);
+  font-size: var(--body-base-font-size);
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 自定义滚动条 — 贴合深色主题 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-overlay-l3);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-overlay-l4);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 隐藏滚动条变体 */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* 等宽计时器数字 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 淡入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out;
+}
+
+/* 上下文菜单弹出 */
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-menu-in {
+  transform-origin: top left;
+  animation: menuIn 0.12s ease-out;
+}
+
+/* 通话页径向光晕 */
+.call-glow {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(50, 240, 140, 0.08) 0%, transparent 60%),
+    var(--bg-base-default);
+}

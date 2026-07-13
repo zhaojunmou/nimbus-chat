@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nimbus Chat</title>
+    <!--
+      主题防闪烁脚本 — 在 CSS 应用前同步读取 localStorage 并设置 data-theme 属性。
+      放在 <head> 顶部确保在任何渲染前执行，避免 FOUC 和不同浏览器的 JS 模块加载时序差异。
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("nimbus_chat_theme");
+          if (t === "light") {
+            document.documentElement.setAttribute("data-theme", "light");
+          } else {
+            document.documentElement.removeAttribute("data-theme");
+          }
+        } catch (e) {
+          /* localStorage 不可用时默认 dark（:root 默认变量） */
+        }
+      })();
+    </script>
+    <script type="module">
+      if (import.meta.hot?.on) {
+        import.meta.hot.on('vite:error', (error) => {
+          if (error.err) {
+            console.error(
+              [error.err.message, error.err.frame].filter(Boolean).join('\n'),
+            )
+          }
+        })
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
