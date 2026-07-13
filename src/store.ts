@@ -25,11 +25,20 @@ import {
   onFriendRequestNew,
   onFriendRequestUpdate,
   onProfileUpdated,
+  onGroupMembersUpdated,
+  onCallOffer,
+  onCallAnswer,
+  onCallIceCandidate,
+  onCallReject,
+  onCallEnd,
   registerSocketAuthFailedHandler,
   setActiveConversationForReconnect,
   getSocket,
 } from "./api/socket";
+import { useCallStore } from "./callStore";
 import { getToken, setToken, setStoredUser, clearToken } from "./api/token";
+import { playSound } from "./lib/sound";
+import { setUnreadBadge, sumUnread, isNotiEnabled } from "./lib/notify";
 
 interface AppState {
   // 认证状态
@@ -75,6 +84,14 @@ interface AppState {
   sendFriendRequest: (contactId: string) => Promise<{ autoAccepted: boolean }>;
   acceptFriendRequest: (requestId: string) => Promise<void>;
   rejectFriendRequest: (requestId: string) => Promise<void>;
+
+  // 群聊管理
+  createGroup: (name: string, memberIds: string[]) => Promise<Conversation | null>;
+  getGroupMembers: (groupId: string) => Promise<import("../shared/types").Contact[]>;
+  addGroupMembers: (groupId: string, memberIds: string[]) => Promise<boolean>;
+  removeGroupMember: (groupId: string, userId: string) => Promise<boolean>;
+  leaveGroup: (groupId: string) => Promise<boolean>;
+  updateGroupName: (groupId: string, name: string) => Promise<boolean>;
 
   // 移动端侧边栏抽屉
   sidebarOpen: boolean;
@@ -128,6 +145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     clearToken();
     disconnectSocket();
     realtimeSubscribed = false;
+    // 清理通话状态
+    useCallStore.getState().endCall();
     set({
       isAuthenticated: false,
       authReady: true,
@@ -142,6 +161,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       incomingRequests: [],
       outgoingRequests: [],
     });
+    // 登出后清空浏览器标签页徽章
+    setUnreadBadge(0);
   },
 
   initialized: false,
@@ -212,6 +233,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         : s.messagesByConv,
     }));
+    // 未读数清零后同步浏览器标签页徽章
+    syncBadge(get().conversations);
   },
   deleteConversation: async (id) => {
     await api.deleteConversation(id);
@@ -280,8 +303,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!sock || !sock.connected) {
       return false;
     }
-    // 压缩图片为 data URL（控制大小，避免 store.json 膨胀）
-    const dataUrl = await compressImage(file, 1280, 0.85);
+    // GIF / WebP / APNG 动画走 canvas 压缩会丢失动画帧，直接用原始 data URL
+    const isAnimated =
+      file.type === "image/gif" ||
+      file.type === "image/webp" ||
+      file.type === "image/apng";
+    const dataUrl = isAnimated
+      ? await readFileAsDataUrl(file)
+      : await compressImage(file, 1280, 0.85);
     // 通过 socket 发送图片消息
     socketSend(conversationId, "", dataUrl, file.name);
     return true;
@@ -352,6 +381,93 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ incomingRequests: incoming, outgoingRequests: outgoing });
   },
 
+  // ── 群聊管理 ──
+  createGroup: async (name, memberIds) => {
+    try {
+      const conv = await api.createGroup(name, memberIds);
+      set((s) => ({
+        conversations: s.conversations.some((c) => c.id === conv.id)
+          ? s.conversations.map((c) => (c.id === conv.id ? { ...c, ...conv } : c))
+          : [conv, ...s.conversations],
+      }));
+      return conv;
+    } catch (err) {
+      console.error("[createGroup] failed:", err);
+      return null;
+    }
+  },
+  getGroupMembers: async (groupId) => {
+    try {
+      return await api.getGroupMembers(groupId);
+    } catch (err) {
+      console.error("[getGroupMembers] failed:", err);
+      return [];
+    }
+  },
+  addGroupMembers: async (groupId, memberIds) => {
+    try {
+      const conv = await api.addGroupMembers(groupId, memberIds);
+      // 更新本地会话（同步 memberIds 等字段）
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.contactId === groupId ? { ...c, ...conv, memberIds: conv.memberIds } : c,
+        ),
+      }));
+      return true;
+    } catch (err) {
+      console.error("[addGroupMembers] failed:", err);
+      return false;
+    }
+  },
+  removeGroupMember: async (groupId, userId) => {
+    try {
+      const conv = await api.removeGroupMember(groupId, userId);
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.contactId === groupId ? { ...c, ...conv, memberIds: conv.memberIds } : c,
+        ),
+      }));
+      return true;
+    } catch (err) {
+      console.error("[removeGroupMember] failed:", err);
+      return false;
+    }
+  },
+  leaveGroup: async (groupId) => {
+    try {
+      await api.leaveGroup(groupId);
+      // 从会话列表移除该群
+      set((s) => ({
+        conversations: s.conversations.filter((c) => c.contactId !== groupId),
+        activeConversationId:
+          s.activeConversationId &&
+          s.conversations.some((c) => c.id === s.activeConversationId && c.contactId === groupId)
+            ? null
+            : s.activeConversationId,
+      }));
+      return true;
+    } catch (err) {
+      console.error("[leaveGroup] failed:", err);
+      return false;
+    }
+  },
+  updateGroupName: async (groupId, name) => {
+    try {
+      const conv = await api.updateGroupInfo(groupId, name);
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.contactId === groupId
+            ? { ...c, name: conv.name, initials: conv.initials }
+            : c,
+        ),
+      }));
+      return true;
+    } catch (err) {
+      console.error("[updateGroupName] failed:", err);
+      return false;
+    }
+  },
+
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
@@ -381,6 +497,7 @@ registerLogoutHandler(() => {
     sidebarOpen: false,
   });
   realtimeSubscribed = false;
+  setUnreadBadge(0);
 });
 
 // socket 鉴权失败（token 过期）→ 同样触发登出
@@ -399,6 +516,7 @@ registerSocketAuthFailedHandler(() => {
     sidebarOpen: false,
   });
   realtimeSubscribed = false;
+  setUnreadBadge(0);
 });
 
 // ── 登录后加载应用数据 + 建立实时连接 ──
@@ -458,6 +576,8 @@ async function bootstrapAppData(
     initialized: true,
     authReady: true,
   });
+  // 数据加载完成后同步未读徽章
+  syncBadge(conversations);
 }
 
 // ── 实时事件订阅 ──
@@ -486,11 +606,16 @@ function subscribeRealtime(
         },
       };
     });
-    // 未读数由 conversation:updated 事件携带（服务端已 +1），此处不重复累加
-    // 若消息来自对方且用户正在查看该会话 → 标记已读（重置未读数）
+    // 收到对方消息时播放提示音（仅在非活动会话或页面隐藏时）
     const active = get().activeConversationId;
-    if (!correctedMsg.isSent && active === correctedMsg.conversationId) {
-      get().markConversationRead(correctedMsg.conversationId);
+    if (!correctedMsg.isSent) {
+      const isViewing = active === correctedMsg.conversationId && !document.hidden;
+      if (!isViewing) {
+        playSound("message");
+      }
+      if (active === correctedMsg.conversationId) {
+        get().markConversationRead(correctedMsg.conversationId);
+      }
     }
   });
 
@@ -535,6 +660,8 @@ function subscribeRealtime(
         ],
       };
     });
+    // 同步浏览器标签页未读徽章
+    syncBadge(get().conversations);
   });
 
   // 输入指示
@@ -580,14 +707,22 @@ function subscribeRealtime(
     });
   });
 
-  // 收到新的好友请求 → 刷新请求列表
+  // 收到新的好友请求 → 刷新请求列表 + 播放好友申请提示音
   onFriendRequestNew(() => {
     get().loadFriendRequests();
+    playSound("friendRequest");
   });
 
-  // 好友请求状态变更（对方接受/拒绝）→ 刷新请求列表
-  onFriendRequestUpdate(() => {
+  // 好友请求状态变更（对方接受/拒绝）→ 刷新请求列表 + 同意时播放提示音
+  onFriendRequestUpdate((req) => {
+    // 判断是否是我发出的请求被对方同意（之前 pending → 现在 accepted）
+    const wasPending = get().outgoingRequests.some(
+      (r) => r.id === req.id && r.status === "pending",
+    );
     get().loadFriendRequests();
+    if (wasPending && req.status === "accepted") {
+      playSound("friendAccepted");
+    }
   });
 
   // 联系人资料变更（对方更新了头像/昵称等）→ 更新会话列表 + 刷新好友请求
@@ -601,6 +736,78 @@ function subscribeRealtime(
     }));
     // 好友请求列表中发起方资料也需刷新（头像/昵称可能已变）
     get().loadFriendRequests();
+  });
+
+  // 群聊成员变更（加入/退出/被移除/群信息更新）→ 更新本地会话
+  onGroupMembersUpdated(({ groupId, conversation: groupConv }) => {
+    const myId = get().user?.id;
+    set((s) => {
+      // 查找当前用户在该群的会话
+      const myConv = s.conversations.find(
+        (c) => c.contactId === groupId && c.ownerId === myId,
+      );
+      if (!myConv) {
+        // 当前用户不在群成员中但有此会话（可能被移除）→ 不处理，leaveGroup 会单独清理
+        return {};
+      }
+      // 如果当前用户已不在群成员列表中 → 从会话列表移除
+      const isStillMember = groupConv.memberIds?.includes(myId ?? "");
+      if (myId && !isStillMember) {
+        return {
+          conversations: s.conversations.filter((c) => c.contactId !== groupId),
+          activeConversationId:
+            s.activeConversationId === myConv.id ? null : s.activeConversationId,
+        };
+      }
+      // 更新群信息（名称、成员列表等）
+      return {
+        conversations: s.conversations.map((c) =>
+          c.contactId === groupId
+            ? {
+                ...c,
+                name: groupConv.name,
+                initials: groupConv.initials,
+                color: groupConv.color,
+                memberIds: groupConv.memberIds,
+                groupOwnerId: groupConv.groupOwnerId,
+                groupAdminIds: groupConv.groupAdminIds,
+              }
+            : c,
+        ),
+      };
+    });
+  });
+
+  // ── WebRTC 语音通话信令 ──
+
+  // 收到来电邀请
+  onCallOffer(({ from, fromName, conversationId, offer }) => {
+    console.log("[socket] call:offer from", from);
+    useCallStore.getState().onIncomingOffer({ from, fromName, conversationId, offer });
+    playSound("message"); // 来电提示音
+  });
+
+  // 收到对方 answer（呼叫方收到被叫方的应答）
+  onCallAnswer(({ from, answer }) => {
+    console.log("[socket] call:answer from", from);
+    useCallStore.getState().onRemoteAnswer(from, answer);
+  });
+
+  // 收到 ICE 候选
+  onCallIceCandidate(({ from, candidate }) => {
+    useCallStore.getState().onRemoteIceCandidate(from, candidate);
+  });
+
+  // 对方拒接
+  onCallReject(({ from }) => {
+    console.log("[socket] call:reject from", from);
+    useCallStore.getState().onRemoteReject(from);
+  });
+
+  // 对方挂断
+  onCallEnd(({ from }) => {
+    console.log("[socket] call:end from", from);
+    useCallStore.getState().onRemoteEnd(from);
   });
 }
 
@@ -681,3 +888,35 @@ export const avatarColors: AvatarColor[] = [
   "cyan",
   "teal",
 ];
+
+/** 读取文件为 data URL（不经过 canvas，保留动画帧） */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── 浏览器标签页未读徽章同步 ──
+
+/**
+ * 计算会话列表未读总数并更新浏览器标签页（title + favicon）。
+ * 受 msgNoti 偏好控制 — 关闭通知时不显示徽章。
+ */
+function syncBadge(conversations: Conversation[]): void {
+  if (!isNotiEnabled()) {
+    setUnreadBadge(0);
+    return;
+  }
+  const total = sumUnread(conversations.map((c) => c.unreadCount ?? 0));
+  setUnreadBadge(total);
+}
+
+/**
+ * 手动刷新浏览器标签页徽章（供设置页切换 msgNoti 偏好后调用）。
+ */
+export function refreshBadge(): void {
+  syncBadge(useAppStore.getState().conversations);
+}

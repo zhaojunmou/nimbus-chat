@@ -82,7 +82,11 @@ export function EmojiPicker({ onPick, onClose }: EmojiPickerProps) {
       return;
     }
     try {
-      const dataUrl = await compressImage(file, 96, 0.8);
+      // GIF / WebP 动画走 canvas 压缩会丢失动画帧，直接保留原始 data URL
+      const isAnimated = file.type === "image/gif" || file.type === "image/webp" || file.type === "image/apng";
+      const dataUrl = isAnimated
+        ? await readFileAsDataUrl(file)
+        : await compressImage(file, 96, 0.8);
       const { list } = addCustomEmoji(customEmojis, dataUrl, file.name);
       persistCustom(list);
       toast(t("emoji.added"), "success");
@@ -273,6 +277,16 @@ function compressImage(file: File, size: number, quality: number): Promise<strin
       };
       img.src = reader.result as string;
     };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** 读取文件为 data URL（不经过 canvas，保留动画帧） */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read failed"));
+    reader.onload = () => resolve(reader.result as string);
     reader.readAsDataURL(file);
   });
 }

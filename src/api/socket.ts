@@ -155,6 +155,15 @@ export function onProfileUpdated(
   return () => s.off("profile:updated", cb);
 }
 
+/** 订阅群聊成员变更（加入/退出/被移除）— 通知相关成员刷新群信息 */
+export function onGroupMembersUpdated(
+  cb: (p: { groupId: string; conversation: Conversation }) => void,
+): () => void {
+  const s = connectSocket();
+  s.on("group:members:updated", cb);
+  return () => s.off("group:members:updated", cb);
+}
+
 // ── 主动发送事件 ──
 
 export function joinConversation(conversationId: string) {
@@ -184,4 +193,81 @@ export function startTyping(conversationId: string) {
 
 export function stopTyping(conversationId: string) {
   connectSocket().emit("typing:stop", conversationId);
+}
+
+// ── WebRTC 语音通话信令 ──
+
+/** 收到通话邀请 */
+export function onCallOffer(
+  cb: (p: {
+    from: string;
+    fromName: string;
+    conversationId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => void,
+): () => void {
+  const s = connectSocket();
+  s.on("call:offer", cb);
+  return () => s.off("call:offer", cb);
+}
+
+/** 通话被接受（收到 answer） */
+export function onCallAnswer(
+  cb: (p: { from: string; answer: RTCSessionDescriptionInit }) => void,
+): () => void {
+  const s = connectSocket();
+  s.on("call:answer", cb);
+  return () => s.off("call:answer", cb);
+}
+
+/** 收到 ICE 候选 */
+export function onCallIceCandidate(
+  cb: (p: { from: string; candidate: RTCIceCandidateInit }) => void,
+): () => void {
+  const s = connectSocket();
+  s.on("call:ice-candidate", cb);
+  return () => s.off("call:ice-candidate", cb);
+}
+
+/** 通话被拒绝 */
+export function onCallReject(cb: (p: { from: string }) => void): () => void {
+  const s = connectSocket();
+  s.on("call:reject", cb);
+  return () => s.off("call:reject", cb);
+}
+
+/** 通话被对方挂断 */
+export function onCallEnd(cb: (p: { from: string }) => void): () => void {
+  const s = connectSocket();
+  s.on("call:end", cb);
+  return () => s.off("call:end", cb);
+}
+
+/** 发起通话邀请 */
+export function emitCallOffer(
+  to: string,
+  conversationId: string,
+  offer: RTCSessionDescriptionInit,
+) {
+  connectSocket().emit("call:offer", { to, conversationId, offer });
+}
+
+/** 接受通话（回复 answer） */
+export function emitCallAnswer(to: string, answer: RTCSessionDescriptionInit) {
+  connectSocket().emit("call:answer", { to, answer });
+}
+
+/** 发送 ICE 候选 */
+export function emitCallIceCandidate(to: string, candidate: RTCIceCandidateInit) {
+  connectSocket().emit("call:ice-candidate", { to, candidate });
+}
+
+/** 拒接来电 */
+export function emitCallReject(to: string) {
+  connectSocket().emit("call:reject", { to });
+}
+
+/** 挂断通话 */
+export function emitCallEnd(to: string) {
+  connectSocket().emit("call:end", { to });
 }

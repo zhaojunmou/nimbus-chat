@@ -14,6 +14,8 @@ import {
   Trash,
   X,
   Shield,
+  ChevronDown,
+  UserPlus,
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Modal } from "./Modal";
@@ -53,6 +55,8 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
   const [searchQuery, setSearchQuery] = useState("");
   // New Chat 选人弹窗
   const [showNewChat, setShowNewChat] = useState(false);
+  // 新建菜单（新聊天 / 创建群聊）
+  const [showNewMenu, setShowNewMenu] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
 
   // 右键菜单状态
@@ -62,6 +66,7 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
     convId: string;
   } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const newMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menu) return;
@@ -73,6 +78,18 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [menu]);
+
+  // 新建菜单点击外部关闭
+  useEffect(() => {
+    if (!showNewMenu) return;
+    const close = (e: globalThis.MouseEvent) => {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setShowNewMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showNewMenu]);
 
   const handleConvClick = (id: string) => {
     setActive(id);
@@ -108,8 +125,16 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
 
   // 打开 New Chat 弹窗时拉取联系人
   const openNewChat = () => {
+    setShowNewMenu(false);
     setShowNewChat(true);
     api.getContacts().then(setContacts).catch(() => {});
+  };
+
+  // 跳转到创建群聊页
+  const openCreateGroup = () => {
+    setShowNewMenu(false);
+    setSidebarOpen(false);
+    navigate("/groups/new");
   };
 
   const startChatWith = async (contact: Contact) => {
@@ -159,10 +184,11 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
             },
           },
           {
-            label: t("sidebar.viewProfile"),
+            label: targetConv?.isGroup ? t("group.groupInfo") : t("sidebar.viewProfile"),
             icon: UserCircle,
             onClick: () => {
-              navigate(`/contacts/${targetConv?.contactId ?? menu.convId}`);
+              const cid = targetConv?.contactId ?? menu.convId;
+              navigate(targetConv?.isGroup ? `/groups/${cid}` : `/contacts/${cid}`);
               setMenu(null);
             },
           },
@@ -201,14 +227,44 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
         <span className="font-heading text-[13px] font-semibold text-text-default">
           {t("nav.nimbusChat")}
         </span>
-        <button
-          type="button"
-          onClick={openNewChat}
-          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-[var(--radius-6)] text-text-secondary hover:bg-[var(--bg-overlay-l2)] hover:text-text-default cursor-pointer transition-colors duration-150 text-[11px] font-medium"
-        >
-          <MessageSquarePlus size={16} />
-          {t("sidebar.newChat")}
-        </button>
+        <div className="relative" ref={newMenuRef}>
+          <button
+            type="button"
+            onClick={() => setShowNewMenu((v) => !v)}
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-[var(--radius-6)] text-text-secondary hover:bg-[var(--bg-overlay-l2)] hover:text-text-default cursor-pointer transition-colors duration-150 text-[11px] font-medium"
+            aria-expanded={showNewMenu}
+            aria-haspopup="menu"
+          >
+            <MessageSquarePlus size={16} />
+            {t("sidebar.newChat")}
+            <ChevronDown size={12} className="opacity-70" />
+          </button>
+          {showNewMenu && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1 min-w-[160px] bg-bg-menu border border-border-neutral-2 rounded-[var(--radius-8)] py-1 shadow-menu animate-menu-in z-50"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={openNewChat}
+                className="flex items-center gap-2 px-3 py-2 mx-1 rounded-[var(--radius-4)] cursor-pointer transition-colors duration-100 w-[calc(100%-8px)] text-[12px] text-text-default hover:bg-[var(--bg-overlay-l2)]"
+              >
+                <MessageSquarePlus size={14} className="flex-shrink-0" />
+                {t("sidebar.newChat")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={openCreateGroup}
+                className="flex items-center gap-2 px-3 py-2 mx-1 rounded-[var(--radius-4)] cursor-pointer transition-colors duration-100 w-[calc(100%-8px)] text-[12px] text-text-default hover:bg-[var(--bg-overlay-l2)]"
+              >
+                <UserPlus size={14} className="flex-shrink-0" />
+                {t("group.createGroup")}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 搜索栏 */}

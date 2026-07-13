@@ -246,7 +246,7 @@ export default function ConversationDetail() {
             online={conv.isOnline}
             imageUrl={conv.avatarUrl}
           />
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/contacts/${conv.contactId ?? conv.id}`)}>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(conv.isGroup ? `/groups/${conv.contactId ?? conv.id}` : `/contacts/${conv.contactId ?? conv.id}`)}>
             <div className="flex items-center gap-2">
               <span className="text-[14px] font-semibold text-text-default truncate">
                 {conv.name}
@@ -266,8 +266,8 @@ export default function ConversationDetail() {
           />
           <IconButton
             icon={<Users size={18} />}
-            onClick={() => navigate(`/contacts/${conv.contactId ?? conv.id}`)}
-            aria-label="联系人"
+            onClick={() => navigate(conv.isGroup ? `/groups/${conv.contactId ?? conv.id}` : `/contacts/${conv.contactId ?? conv.id}`)}
+            aria-label={conv.isGroup ? t("group.groupInfo") : t("sidebar.viewProfile")}
           />
           <IconButton
             icon={<MoreHorizontal size={18} />}
@@ -504,7 +504,7 @@ export default function ConversationDetail() {
           <MenuItem icon={conv.isPinned ? Pin : Pin} label={conv.isPinned ? t("chat.unpin") : t("chat.pin")} onClick={handlePin} />
           <MenuItem icon={conv.isMuted ? Bell : BellOff} label={conv.isMuted ? t("chat.unmute") : t("chat.mute")} onClick={handleMute} />
           <div className="h-px bg-border-neutral my-1" />
-          <MenuItem icon={UserCircle} label={t("chat.viewProfile")} onClick={() => { setMenu(null); navigate(`/contacts/${conv.contactId ?? conv.id}`); }} />
+          <MenuItem icon={UserCircle} label={conv.isGroup ? t("group.groupInfo") : t("chat.viewProfile")} onClick={() => { setMenu(null); navigate(conv.isGroup ? `/groups/${conv.contactId ?? conv.id}` : `/contacts/${conv.contactId ?? conv.id}`); }} />
           <MenuItem icon={Eraser} label={t("chat.clearMessages")} onClick={() => { setMenu(null); setConfirmClear(true); }} />
           <div className="h-px bg-border-neutral my-1" />
           <MenuItem icon={Trash} label={t("chat.deleteChat")} danger onClick={() => { setMenu(null); setConfirmDelete(true); }} />

@@ -127,7 +127,7 @@ export default function ContactsManagement() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => navigate(`/contacts/${c.id}`)}
+                onClick={() => navigate(c.isGroup ? `/groups/${c.id}` : `/contacts/${c.id}`)}
                 className="flex items-center gap-3 w-full px-2 py-2.5 rounded-[var(--radius-8)] hover:bg-[var(--bg-overlay-l2)] cursor-pointer transition-colors duration-100 text-left"
               >
                 <Avatar

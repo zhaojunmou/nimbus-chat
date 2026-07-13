@@ -70,6 +70,8 @@ function getPageTitle(path: string, t: (k: string) => string): string {
   if (path === "/contacts") return t("nav.contacts");
   if (path === "/contacts/add") return t("nav.addContact");
   if (path.startsWith("/contacts/")) return t("nav.contact");
+  if (path === "/groups/new") return t("group.createGroup");
+  if (path.startsWith("/groups/")) return t("group.groupInfo");
   if (path === "/notifications") return t("nav.notifications");
   if (path === "/settings") return t("nav.settings");
   if (path === "/settings/profile") return t("nav.editProfile");

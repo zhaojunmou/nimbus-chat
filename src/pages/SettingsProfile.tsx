@@ -20,7 +20,7 @@ import { Card } from "@/components/Card";
 import { SettingRow, SectionTitle } from "@/components/SettingRow";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/components/Toast";
-import { useAppStore, avatarColors } from "@/store";
+import { useAppStore, avatarColors, refreshBadge } from "@/store";
 import { api } from "@/api/client";
 import { getPreferences, savePreferences } from "@/lib/preferences";
 import { colorVarMap, type AvatarColor } from "@/types";
@@ -82,6 +82,8 @@ export default function SettingsProfile() {
   const handleMsgNoti = (v: boolean) => {
     setMsgNoti(v);
     savePreferences({ msgNoti: v });
+    // 立即同步浏览器标签页徽章（关闭时清除，开启时恢复）
+    refreshBadge();
     toast(v ? t("settings.msgNotiOn") : t("settings.msgNotiOff"), "success");
   };
   const handleSoundNoti = (v: boolean) => {

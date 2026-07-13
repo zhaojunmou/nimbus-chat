@@ -1,54 +1,119 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   MoreHorizontal,
   Mic,
-  BarChart3,
-  Users,
-  XCircle,
+  MicOff,
   MessageSquare,
-  PanelBottom,
+  XCircle,
+  Loader2,
+  PhoneOff,
 } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store";
-import { conversations as fallbackConvs } from "@/mockData";
+import { useCallStore } from "@/callStore";
 import { cn } from "@/lib/utils";
 
-/** 语音通话 — 全屏单栏，径向光晕背景 + 计时器 + 6 控制按钮 */
+/**
+ * 语音通话页 — 接入真实 WebRTC
+ *
+ * 两种进入方式：
+ * 1. 主动呼叫：从会话页点通话按钮 → startOutgoingCall → navigate /call/:id
+ * 2. 接听来电：IncomingCallDialog accept → navigate /call/:id（此时 callStore 已在 connecting）
+ *
+ * 如果进入页面时 callStore.status === 'idle'（如直接访问 URL），自动发起呼叫
+ */
 export default function VoiceCall() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const storeConv = useAppStore((s) => s.conversations.find((c) => c.id === id));
-  const conv = storeConv ?? fallbackConvs.find((c) => c.id === id);
+
+  const storeConv = useAppStore((s) =>
+    s.conversations.find((c) => c.id === id),
+  );
+
+  const callStatus = useCallStore((s) => s.status);
+  const peerName = useCallStore((s) => s.peerName);
+  const peerId = useCallStore((s) => s.peerId);
+  const muted = useCallStore((s) => s.muted);
+  const callConvId = useCallStore((s) => s.conversationId);
+  const micAvailable = useCallStore((s) => s.micAvailable);
+  const startOutgoingCall = useCallStore((s) => s.startOutgoingCall);
+  const endCall = useCallStore((s) => s.endCall);
+  const toggleMute = useCallStore((s) => s.toggleMute);
+
   const [seconds, setSeconds] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [speaker, setSpeaker] = useState(false);
-  const [chat, setChat] = useState(false);
-  const [share, setShare] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const startedRef = useRef(false);
 
-  // 2 秒后"接通"
+  // 页面挂载时：如果 callStore 处于 idle，说明是主动发起呼叫
   useEffect(() => {
-    const connectTimer = setTimeout(() => setConnected(true), 2000);
-    return () => clearTimeout(connectTimer);
-  }, []);
+    if (!id || startedRef.current) return;
+    if (callStatus === "idle") {
+      startedRef.current = true;
+      const conv = useAppStore
+        .getState()
+        .conversations.find((c) => c.id === id);
+      if (!conv) {
+        toast(t("call.callTargetNotFound"), "error");
+        navigate(-1);
+        return;
+      }
+      // 群聊暂不支持语音通话
+      if (conv.isGroup) {
+        toast(t("call.groupNotSupported"), "info");
+        navigate(`/chat/${conv.id}`);
+        return;
+      }
+      const targetId = conv.contactId ?? conv.id;
+      const targetName = conv.name;
+      startOutgoingCall(targetId, targetName, conv.id);
+    } else {
+      // 已经在通话中（接听来电后跳转过来）— 标记已启动
+      startedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  // 计时器仅在接通后启动
+  // 计时器仅在 connected 状态下启动
   useEffect(() => {
-    if (!connected) return;
+    if (callStatus !== "connected") {
+      setSeconds(0);
+      return;
+    }
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
-  }, [connected]);
+  }, [callStatus]);
+
+  // 通话结束/拒绝/失败 → 自动返回聊天页
+  useEffect(() => {
+    if (
+      callStatus === "ended" ||
+      callStatus === "rejected" ||
+      callStatus === "failed"
+    ) {
+      const targetConvId = id ?? callConvId ?? "";
+      const timer = setTimeout(() => {
+        if (targetConvId) {
+          navigate(`/chat/${targetConvId}`, { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [callStatus, id, callConvId, navigate]);
+
+  const conv = storeConv;
+  const displayName = peerName ?? conv?.name ?? t("call.unknown");
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
 
-  if (!conv) {
+  if (!conv && callStatus === "idle") {
     return (
       <div className="h-screen flex items-center justify-center text-text-secondary">
         {t("call.callTargetNotFound")}
@@ -56,44 +121,34 @@ export default function VoiceCall() {
     );
   }
 
-  const controls = [
-    {
-      icon: Mic,
-      label: muted ? t("call.unmute") : t("call.mute"),
-      active: muted,
-      onClick: () => setMuted((v) => !v),
-    },
-    {
-      icon: BarChart3,
-      label: t("call.speaker"),
-      active: speaker,
-      onClick: () => setSpeaker((v) => !v),
-    },
-    {
-      icon: Users,
-      label: t("call.add"),
-      active: false,
-      onClick: () => toast(t("call.addComingSoon"), "info"),
-    },
-    {
-      icon: MessageSquare,
-      label: t("call.chat"),
-      active: chat,
-      onClick: () => {
-        setChat(true);
-        navigate(`/chat/${conv.id}`);
-      },
-    },
-    {
-      icon: PanelBottom,
-      label: t("call.share"),
-      active: share,
-      onClick: () => {
-        setShare((v) => !v);
-        if (!share) toast(t("call.shareComingSoon"), "info");
-      },
-    },
-  ];
+  // 状态文案
+  const statusText = (() => {
+    switch (callStatus) {
+      case "calling":
+        return t("call.calling");
+      case "connecting":
+        return t("call.connecting");
+      case "connected":
+        return t("call.connected");
+      case "ended":
+        return t("call.ended");
+      case "rejected":
+        return t("call.rejected");
+      case "failed":
+        return t("call.failed");
+      default:
+        return t("call.calling");
+    }
+  })();
+
+  const handleHangup = () => {
+    endCall();
+  };
+
+  const handleBack = () => {
+    // 通话中返回聊天页（不挂断）
+    if (id) navigate(`/chat/${id}`);
+  };
 
   return (
     <div className="call-glow h-screen flex flex-col relative overflow-hidden">
@@ -101,7 +156,7 @@ export default function VoiceCall() {
       <div className="flex items-center justify-between p-4 flex-shrink-0">
         <button
           type="button"
-          onClick={() => navigate(`/chat/${conv.id}`)}
+          onClick={handleBack}
           className="inline-flex items-center justify-center w-9 h-9 rounded-[var(--radius-6)] text-text-secondary hover:bg-[var(--bg-overlay-l2)] hover:text-text-default cursor-pointer transition-colors duration-150"
           aria-label={t("conversation.backLabel")}
         >
@@ -120,9 +175,13 @@ export default function VoiceCall() {
       {/* 中央区 */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-10">
         <div className="relative mb-6">
+          {/* 呼叫中脉冲动画 */}
+          {(callStatus === "calling" || callStatus === "connecting") && (
+            <div className="absolute inset-0 rounded-full bg-brand/20 animate-ping-slow" />
+          )}
           {/* 双环边框 */}
           <div
-            className="rounded-full"
+            className="relative rounded-full"
             style={{ padding: 3, background: "var(--bg-base-default)" }}
           >
             <div
@@ -130,64 +189,91 @@ export default function VoiceCall() {
               style={{ padding: 3, background: "var(--bg-brand)" }}
             >
               <Avatar
-                initials={conv.initials}
-                color={conv.color}
+                initials={conv?.initials ?? displayName[0]?.toUpperCase() ?? "?"}
+                color={conv?.color ?? "brand"}
                 size="2xl"
-                online={conv.isOnline}
-                imageUrl={conv.avatarUrl}
+                online={conv?.isOnline}
+                imageUrl={conv?.avatarUrl}
               />
             </div>
           </div>
         </div>
         <h1 className="font-heading text-[20px] font-semibold text-text-default mb-1">
-          {conv.name}
+          {displayName}
         </h1>
-        <p className="text-[13px] text-text-secondary mb-3">
-          {connected ? t("call.connected") : t("call.calling")}
+        <p className="text-[13px] text-text-secondary mb-3 flex items-center gap-1.5">
+          {(callStatus === "calling" || callStatus === "connecting") && (
+            <Loader2 size={12} className="animate-spin" />
+          )}
+          {statusText}
         </p>
-        <p className="font-mono text-[22px] font-medium text-text-default tnum mb-4">
-          {mm}:{ss}
-        </p>
-        {/* 信号条 */}
-        <div className="flex items-end gap-1">
-          {[5, 9, 14].map((h, i) => (
-            <span
-              key={i}
-              className="bg-brand rounded-full"
-              style={{ width: 3, height: h }}
-            />
-          ))}
-        </div>
+        {!micAvailable && callStatus !== "idle" && (
+          <p className="text-[11px] text-status-error bg-status-error/10 px-3 py-1.5 rounded-[var(--radius-6)] mb-3 max-w-[320px]">
+            {t("call.micUnavailable")}
+          </p>
+        )}
+        {callStatus === "connected" && (
+          <p className="font-mono text-[22px] font-medium text-text-default tnum mb-4">
+            {mm}:{ss}
+          </p>
+        )}
+        {/* 信号条 — 仅接通后显示 */}
+        {callStatus === "connected" && (
+          <div className="flex items-end gap-1">
+            {[5, 9, 14].map((h, i) => (
+              <span
+                key={i}
+                className="bg-brand rounded-full animate-pulse"
+                style={{ width: 3, height: h, animationDelay: `${i * 0.2}s` }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 底部控制栏 */}
       <div className="absolute bottom-10 left-0 right-0 flex items-center justify-center gap-6 px-6">
-        {controls.map((c, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={c.onClick}
-            className={cn(
-              "inline-flex items-center justify-center rounded-full cursor-pointer transition-all duration-150",
-              c.active
-                ? "bg-brand-soft text-brand"
-                : "bg-bg-tertiary text-text-default hover:bg-[var(--bg-overlay-l3)]",
-            )}
-            style={{ width: 56, height: 56 }}
-            aria-label={c.label}
-          >
-            <c.icon size={22} />
-          </button>
-        ))}
+        {/* 静音按钮 */}
+        <button
+          type="button"
+          onClick={toggleMute}
+          disabled={callStatus !== "connected" || !micAvailable}
+          className={cn(
+            "inline-flex items-center justify-center rounded-full cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
+            muted
+              ? "bg-brand-soft text-brand"
+              : "bg-bg-tertiary text-text-default hover:bg-[var(--bg-overlay-l3)]",
+          )}
+          style={{ width: 56, height: 56 }}
+          aria-label={muted ? t("call.unmute") : t("call.mute")}
+        >
+          {muted ? <MicOff size={22} /> : <Mic size={22} />}
+        </button>
+
+        {/* 聊天按钮 — 返回聊天页（不挂断） */}
+        <button
+          type="button"
+          onClick={handleBack}
+          className="inline-flex items-center justify-center rounded-full bg-bg-tertiary text-text-default hover:bg-[var(--bg-overlay-l3)] cursor-pointer transition-all duration-150"
+          style={{ width: 56, height: 56 }}
+          aria-label={t("call.chat")}
+        >
+          <MessageSquare size={22} />
+        </button>
+
         {/* 挂断按钮 */}
         <button
           type="button"
-          onClick={() => navigate(`/chat/${conv.id}`)}
+          onClick={handleHangup}
           className="inline-flex items-center justify-center rounded-full bg-status-error text-white hover:brightness-110 cursor-pointer transition-all duration-150"
           style={{ width: 64, height: 64 }}
           aria-label={t("call.hangup")}
         >
-          <XCircle size={26} />
+          {callStatus === "ended" ? (
+            <PhoneOff size={26} />
+          ) : (
+            <XCircle size={26} />
+          )}
         </button>
       </div>
     </div>

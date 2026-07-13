@@ -78,17 +78,43 @@ export function registerSocketHandlers(io: IO) {
       // 2) 更新发送方的会话列表
       io.to(`user:${userId}`).emit("conversation:updated", senderConv);
 
-      // 3) 为接收方创建消息副本（在接收方自己的会话中，isSent: false）
-      //    这样接收方刷新页面后 GET /conversations 和 GET /messages 都能拿到正确数据
-      if (recipientId && recipientId !== userId && !senderConv.isGroup) {
-        // 确保发送方在联系人表中存在（接收方可能尚无此联系人条目）
+      // 3) 消息分发：单聊 vs 群聊
+      if (senderConv.isGroup) {
+        // 群聊：为每个群成员（除发送者外）创建消息副本
+        const memberIds = senderConv.memberIds ?? [];
+        // 获取发送者账号信息用于消息预览
+        const senderAccount = svc.getAccountByIdPublic?.(userId);
+        const senderName = senderAccount?.displayName ?? userId;
+        for (const memberId of memberIds) {
+          if (memberId === userId) continue; // 跳过发送者自己
+          // 查找成员的会话副本
+          const memberConv = db.conversations.find(
+            (c) => c.ownerId === memberId && c.contactId === recipientId,
+          );
+          if (!memberConv) continue; // 成员已退出或无会话
+          // 在成员会话中创建消息副本
+          const memberResult = svc.createRecipientMessage(
+            memberConv.id,
+            userId,
+            senderName,
+            text,
+            senderMsg.timestamp,
+            senderMsg.seq ?? 0,
+            imageUrl,
+            fileName,
+          );
+          if (memberResult) {
+            io.to(`user:${memberId}`).emit("message:new", memberResult.message);
+            io.to(`user:${memberId}`).emit("conversation:updated", memberResult.conversation);
+          }
+        }
+      } else if (recipientId && recipientId !== userId) {
+        // 单聊：为接收方创建消息副本
         svc.ensureContactForAccount(userId);
-        // 查找或创建接收方的会话（ownerId = 接收方, contactId = 发送方）
         let recipientConv = svc.findConversationByContact(recipientId, userId);
         if (!recipientConv) {
           recipientConv = svc.ensureConversation(userId, recipientId);
         }
-        // 在接收方会话中创建消息副本（含图片附件）
         const recipientResult = svc.createRecipientMessage(
           recipientConv.id,
           userId,
@@ -136,6 +162,50 @@ export function registerSocketHandlers(io: IO) {
     // 停止输入
     socket.on("typing:stop", (conversationId) => {
       clearTyping(io, socket, conversationId, userId);
+    });
+
+    // ── WebRTC 语音通话信令转发 ──
+
+    // 发起通话邀请 — 转发给目标用户
+    socket.on("call:offer", ({ to, conversationId, offer }) => {
+      const callerAccount = svc.getAccountByIdPublic(userId);
+      const fromName = callerAccount?.displayName ?? userId;
+      console.log(`[socket] call:offer ${userId} → ${to}`);
+      io.to(`user:${to}`).emit("call:offer", {
+        from: userId,
+        fromName,
+        conversationId,
+        offer,
+      });
+    });
+
+    // 接受通话 — 转发 answer 给呼叫方
+    socket.on("call:answer", ({ to, answer }) => {
+      console.log(`[socket] call:answer ${userId} → ${to}`);
+      io.to(`user:${to}`).emit("call:answer", {
+        from: userId,
+        answer,
+      });
+    });
+
+    // ICE 候选交换 — 转发给对方
+    socket.on("call:ice-candidate", ({ to, candidate }) => {
+      io.to(`user:${to}`).emit("call:ice-candidate", {
+        from: userId,
+        candidate,
+      });
+    });
+
+    // 拒接来电 — 通知呼叫方
+    socket.on("call:reject", ({ to }) => {
+      console.log(`[socket] call:reject ${userId} → ${to}`);
+      io.to(`user:${to}`).emit("call:reject", { from: userId });
+    });
+
+    // 挂断通话 — 通知对方
+    socket.on("call:end", ({ to }) => {
+      console.log(`[socket] call:end ${userId} → ${to}`);
+      io.to(`user:${to}`).emit("call:end", { from: userId });
     });
 
     // 断开连接 → 清理在线状态与输入

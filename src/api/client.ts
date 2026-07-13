@@ -156,6 +156,19 @@ export const api = {
   // ── 账号 ──
   deleteAccount: () => del<{ ok: boolean }>("/me"),
 
+  // ── 群聊管理 ──
+  createGroup: (name: string, memberIds: string[]) =>
+    post<Conversation>("/groups", { name, memberIds }),
+  getGroup: (groupId: string) => get<Conversation>(`/groups/${groupId}`),
+  getGroupMembers: (groupId: string) => get<Contact[]>(`/groups/${groupId}/members`),
+  addGroupMembers: (groupId: string, memberIds: string[]) =>
+    post<Conversation>(`/groups/${groupId}/members`, { memberIds }),
+  removeGroupMember: (groupId: string, userId: string) =>
+    del<Conversation>(`/groups/${groupId}/members/${userId}`),
+  leaveGroup: (groupId: string) => post<{ ok: boolean }>(`/groups/${groupId}/leave`),
+  updateGroupInfo: (groupId: string, name: string) =>
+    patchReq<Conversation>(`/groups/${groupId}`, { name }),
+
   // ── 版本 ──
   getVersion: () => get<{ version: string }>("/version"),
 

@@ -49,6 +49,11 @@ export function isUserOnline(userId: string): boolean {
   return Array.from(db.onlineSockets.values()).includes(userId);
 }
 
+/** 获取账号信息（封装 getAccountById 供 socket handler 使用） */
+export function getAccountByIdPublic(userId: string) {
+  return getAccountById(userId);
+}
+
 /** 当前时间字符串（如 10:42 AM） */
 function now(): string {
   return new Date().toLocaleTimeString("en-US", {
@@ -582,5 +587,355 @@ function addFriend(userId: string, contactId: string): void {
   if (!db.friendsByUser.has(userId)) db.friendsByUser.set(userId, new Set());
   db.friendsByUser.get(userId)!.add(contactId);
   persistDb();
+}
+
+// ── 群聊系统 ──
+
+/** 头像配色循环（创建群聊时按顺序选取） */
+const groupColorCycle: import("../../shared/types.js").AvatarColor[] = [
+  "violet",
+  "amber",
+  "cyan",
+  "teal",
+  "coral",
+  "brand",
+];
+
+/**
+ * 创建群聊 — 由 owner 发起，邀请初始成员组建群。
+ * 会创建：1 个 Contact（群组联系人）+ N 个 Conversation（每个成员各一份，ownerId 隔离）。
+ */
+export function createGroup(
+  ownerUserId: string,
+  name: string,
+  memberIds: string[],
+): Conversation | { error: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Group name is required" };
+  if (memberIds.length === 0) return { error: "At least one member is required" };
+
+  // 群组 id（用 nanoid 生成，加 "group-" 前缀避免与用户 id 冲突）
+  const groupId = `group-${nanoid(8)}`;
+  const initials = trimmed.slice(0, 2).toUpperCase();
+  const color = groupColorCycle[Math.floor(Math.random() * groupColorCycle.length)];
+
+  // 全部成员 id（含群主）
+  const allMembers = Array.from(new Set([ownerUserId, ...memberIds]));
+
+  // 1. 创建群组 Contact（全局共享，所有成员都能看到）
+  const groupContact: Contact = {
+    id: groupId,
+    name: trimmed,
+    initials,
+    color,
+    isOnline: false,
+    lastSeen: `${allMembers.length} members`,
+    isGroup: true,
+    memberCount: allMembers.length,
+    memberIds: allMembers,
+    groupOwnerId: ownerUserId,
+    groupAdminIds: [ownerUserId],
+  };
+  db.contacts.push(groupContact);
+
+  // 2. 为每个成员创建会话副本（ownerId 隔离）
+  for (const memberId of allMembers) {
+    const conv: Conversation = {
+      id: memberId === ownerUserId ? groupId : `${groupId}__${memberId}`,
+      name: trimmed,
+      initials,
+      color,
+      lastMessage: "",
+      lastTime: "",
+      unreadCount: 0,
+      isOnline: false,
+      isGroup: true,
+      ownerId: memberId,
+      contactId: groupId,
+      memberIds: allMembers,
+      groupOwnerId: ownerUserId,
+      groupAdminIds: [ownerUserId],
+    };
+    db.conversations.push(conv);
+
+    // 群组自动加入好友列表
+    if (!db.friendsByUser.has(memberId)) {
+      db.friendsByUser.set(memberId, new Set());
+    }
+    db.friendsByUser.get(memberId)!.add(groupId);
+  }
+
+  persistDb();
+
+  // 3. 通知所有在线成员（除群主外）刷新会话列表
+  const ownerConv = db.conversations.find(
+    (c) => c.ownerId === ownerUserId && c.contactId === groupId,
+  );
+  if (ownerConv) {
+    for (const memberId of allMembers) {
+      if (memberId === ownerUserId) continue;
+      emitToUser(memberId, "group:members:updated", {
+        groupId,
+        conversation: ownerConv,
+      });
+    }
+  }
+
+  return ownerConv ?? { error: "Failed to create group" };
+}
+
+/** 获取群聊信息（返回群主的会话副本作为权威信息源） */
+export function getGroup(groupId: string): Conversation | null {
+  return (
+    db.conversations.find(
+      (c) => c.contactId === groupId && c.ownerId === c.groupOwnerId,
+    ) ?? db.conversations.find((c) => c.contactId === groupId) ?? null
+  );
+}
+
+/** 获取群聊成员的 Contact 列表 */
+export function getGroupMembers(groupId: string): Contact[] {
+  const group = db.contacts.find((c) => c.id === groupId);
+  if (!group?.memberIds) return [];
+  return group.memberIds
+    .map((id) => db.contacts.find((c) => c.id === id))
+    .filter((c): c is Contact => c !== undefined);
+}
+
+/** 添加成员到群聊（仅群主/管理员可操作） */
+export function addGroupMember(
+  groupId: string,
+  operatorId: string,
+  newMemberIds: string[],
+): Conversation | { error: string } {
+  const group = db.contacts.find((c) => c.id === groupId);
+  if (!group?.isGroup) return { error: "Group not found" };
+
+  // 权限检查
+  const isAdmin =
+    group.groupOwnerId === operatorId ||
+    group.groupAdminIds?.includes(operatorId);
+  if (!isAdmin) return { error: "Only admins can add members" };
+
+  const currentMembers = new Set(group.memberIds ?? []);
+  const added: string[] = [];
+  for (const id of newMemberIds) {
+    if (!currentMembers.has(id)) {
+      currentMembers.add(id);
+      added.push(id);
+    }
+  }
+  if (added.length === 0) return { error: "All users are already members" };
+
+  // 更新群组 Contact
+  const newMemberList = Array.from(currentMembers);
+  group.memberIds = newMemberList;
+  group.memberCount = newMemberList.length;
+  group.lastSeen = `${newMemberList.length} members`;
+
+  // 为新成员创建会话副本
+  for (const memberId of added) {
+    const existingConv = db.conversations.find(
+      (c) => c.ownerId === memberId && c.contactId === groupId,
+    );
+    if (existingConv) continue; // 已有会话（曾退出但会话保留）
+    const conv: Conversation = {
+      id: `${groupId}__${memberId}`,
+      name: group.name,
+      initials: group.initials,
+      color: group.color,
+      lastMessage: "",
+      lastTime: "",
+      unreadCount: 0,
+      isOnline: false,
+      isGroup: true,
+      ownerId: memberId,
+      contactId: groupId,
+      memberIds: newMemberList,
+      groupOwnerId: group.groupOwnerId,
+      groupAdminIds: group.groupAdminIds ?? [],
+    };
+    db.conversations.push(conv);
+
+    // 自动加入好友列表
+    if (!db.friendsByUser.has(memberId)) {
+      db.friendsByUser.set(memberId, new Set());
+    }
+    db.friendsByUser.get(memberId)!.add(groupId);
+  }
+
+  // 同步所有现有成员会话的 memberIds 和 memberCount
+  for (const conv of db.conversations) {
+    if (conv.contactId === groupId && conv.isGroup) {
+      conv.memberIds = newMemberList;
+    }
+  }
+
+  persistDb();
+
+  // 通知所有在线成员刷新
+  const groupConv = getGroup(groupId);
+  if (groupConv) {
+    for (const memberId of newMemberList) {
+      emitToUser(memberId, "group:members:updated", {
+        groupId,
+        conversation: groupConv,
+      });
+    }
+  }
+
+  return groupConv ?? { error: "Group update failed" };
+}
+
+/** 移除群成员（仅群主/管理员可操作） */
+export function removeGroupMember(
+  groupId: string,
+  operatorId: string,
+  targetUserId: string,
+): Conversation | { error: string } {
+  const group = db.contacts.find((c) => c.id === groupId);
+  if (!group?.isGroup) return { error: "Group not found" };
+
+  const isAdmin =
+    group.groupOwnerId === operatorId ||
+    group.groupAdminIds?.includes(operatorId);
+  if (!isAdmin) return { error: "Only admins can remove members" };
+  if (group.groupOwnerId === targetUserId) {
+    return { error: "Cannot remove the group owner" };
+  }
+
+  const currentMembers = new Set(group.memberIds ?? []);
+  if (!currentMembers.has(targetUserId)) {
+    return { error: "User is not a member" };
+  }
+  currentMembers.delete(targetUserId);
+
+  const newMemberList = Array.from(currentMembers);
+  group.memberIds = newMemberList;
+  group.memberCount = newMemberList.length;
+  group.lastSeen = `${newMemberList.length} members`;
+
+  // 从管理员列表中移除（如果是管理员）
+  if (group.groupAdminIds) {
+    group.groupAdminIds = group.groupAdminIds.filter((id) => id !== targetUserId);
+  }
+
+  // 同步所有成员会话的 memberIds
+  for (const conv of db.conversations) {
+    if (conv.contactId === groupId && conv.isGroup) {
+      conv.memberIds = newMemberList;
+      conv.groupAdminIds = group.groupAdminIds ?? [];
+    }
+  }
+
+  persistDb();
+
+  // 通知所有在线成员（含被移除者）刷新
+  const groupConv = getGroup(groupId);
+  if (groupConv) {
+    for (const memberId of [...newMemberList, targetUserId]) {
+      emitToUser(memberId, "group:members:updated", {
+        groupId,
+        conversation: groupConv,
+      });
+    }
+  }
+
+  return groupConv ?? { error: "Group update failed" };
+}
+
+/** 退出群聊（非群主可退出，群主须先转让） */
+export function leaveGroup(
+  groupId: string,
+  userId: string,
+): { ok: true } | { error: string } {
+  const group = db.contacts.find((c) => c.id === groupId);
+  if (!group?.isGroup) return { error: "Group not found" };
+  if (group.groupOwnerId === userId) {
+    return { error: "Group owner cannot leave; transfer ownership first" };
+  }
+  if (!group.memberIds?.includes(userId)) {
+    return { error: "You are not a member" };
+  }
+
+  // 从成员列表移除
+  group.memberIds = group.memberIds.filter((id) => id !== userId);
+  group.memberCount = group.memberIds.length;
+  group.lastSeen = `${group.memberIds.length} members`;
+
+  // 从管理员列表移除
+  if (group.groupAdminIds) {
+    group.groupAdminIds = group.groupAdminIds.filter((id) => id !== userId);
+  }
+
+  // 同步所有成员会话
+  for (const conv of db.conversations) {
+    if (conv.contactId === groupId && conv.isGroup) {
+      conv.memberIds = group.memberIds;
+      conv.groupAdminIds = group.groupAdminIds ?? [];
+    }
+  }
+
+  persistDb();
+
+  // 通知所有在线成员刷新
+  const groupConv = getGroup(groupId);
+  if (groupConv) {
+    for (const memberId of [...(group.memberIds ?? []), userId]) {
+      emitToUser(memberId, "group:members:updated", {
+        groupId,
+        conversation: groupConv,
+      });
+    }
+  }
+
+  return { ok: true };
+}
+
+/** 更新群聊信息（名称等，仅群主/管理员可操作） */
+export function updateGroupInfo(
+  groupId: string,
+  operatorId: string,
+  patch: { name?: string },
+): Conversation | { error: string } {
+  const group = db.contacts.find((c) => c.id === groupId);
+  if (!group?.isGroup) return { error: "Group not found" };
+
+  const isAdmin =
+    group.groupOwnerId === operatorId ||
+    group.groupAdminIds?.includes(operatorId);
+  if (!isAdmin) return { error: "Only admins can update group info" };
+
+  if (patch.name) {
+    const trimmed = patch.name.trim();
+    if (!trimmed) return { error: "Group name cannot be empty" };
+    group.name = trimmed;
+    group.initials = trimmed.slice(0, 2).toUpperCase();
+  }
+
+  // 同步所有成员会话的名称
+  for (const conv of db.conversations) {
+    if (conv.contactId === groupId && conv.isGroup) {
+      if (patch.name) {
+        conv.name = group.name;
+        conv.initials = group.initials;
+      }
+    }
+  }
+
+  persistDb();
+
+  // 通知所有成员刷新
+  const groupConv = getGroup(groupId);
+  if (groupConv) {
+    for (const memberId of group.memberIds ?? []) {
+      emitToUser(memberId, "group:members:updated", {
+        groupId,
+        conversation: groupConv,
+      });
+    }
+  }
+
+  return groupConv ?? { error: "Update failed" };
 }
 

@@ -321,5 +321,80 @@ export function createApiRouter(
     res.json({ version: "2.1.0" });
   });
 
+  // ── 群聊管理 ──
+  // 创建群聊
+  apiRouter.post("/groups", (req: AuthedRequest, res: Response) => {
+    const userId = getRequestUserId(req)!;
+    const { name, memberIds } = req.body as { name: string; memberIds: string[] };
+    const result = svc.createGroup(userId, name, memberIds);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  });
+
+  // 获取群聊信息
+  apiRouter.get("/groups/:id", (req, res) => {
+    const group = svc.getGroup(req.params.id);
+    if (!group) {
+      res.status(404).json({ error: "Group not found" });
+      return;
+    }
+    res.json(group);
+  });
+
+  // 获取群成员列表
+  apiRouter.get("/groups/:id/members", (req, res) => {
+    const members = svc.getGroupMembers(req.params.id);
+    res.json(members);
+  });
+
+  // 添加群成员
+  apiRouter.post("/groups/:id/members", (req: AuthedRequest, res: Response) => {
+    const userId = getRequestUserId(req)!;
+    const { memberIds } = req.body as { memberIds: string[] };
+    const result = svc.addGroupMember(req.params.id, userId, memberIds);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  });
+
+  // 移除群成员
+  apiRouter.delete("/groups/:id/members/:userId", (req: AuthedRequest, res: Response) => {
+    const operatorId = getRequestUserId(req)!;
+    const result = svc.removeGroupMember(req.params.id, operatorId, req.params.userId);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  });
+
+  // 退出群聊
+  apiRouter.post("/groups/:id/leave", (req: AuthedRequest, res: Response) => {
+    const userId = getRequestUserId(req)!;
+    const result = svc.leaveGroup(req.params.id, userId);
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  });
+
+  // 更新群聊信息
+  apiRouter.patch("/groups/:id", (req: AuthedRequest, res: Response) => {
+    const userId = getRequestUserId(req)!;
+    const { name } = req.body as { name?: string };
+    const result = svc.updateGroupInfo(req.params.id, userId, { name });
+    if ("error" in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  });
+
   return apiRouter;
 }

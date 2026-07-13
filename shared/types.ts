@@ -28,6 +28,12 @@ export interface Conversation {
   contactId?: string;
   /** 对方头像图片 data URL（存在时优先于首字母渲染） */
   avatarUrl?: string;
+  /** 群聊成员 id 列表（仅 isGroup 时有效） */
+  memberIds?: string[];
+  /** 群主 id（仅 isGroup 时有效） */
+  groupOwnerId?: string;
+  /** 群管理员 id 列表（仅 isGroup 时有效） */
+  groupAdminIds?: string[];
 }
 
 /** 单条消息 */
@@ -64,6 +70,12 @@ export interface Contact {
   role?: string;
   /** 头像图片 data URL（存在时优先于首字母渲染） */
   avatarUrl?: string;
+  /** 群聊成员 id 列表（仅 isGroup 时有效） */
+  memberIds?: string[];
+  /** 群主 id（仅 isGroup 时有效） */
+  groupOwnerId?: string;
+  /** 群管理员 id 列表（仅 isGroup 时有效） */
+  groupAdminIds?: string[];
 }
 
 /** 好友请求 */
@@ -176,6 +188,27 @@ export interface ClientToServerEvents {
   // 正在输入
   "typing:start": (conversationId: string) => void;
   "typing:stop": (conversationId: string) => void;
+  // ── WebRTC 语音通话信令 ──
+  // 发起通话邀请（offer）
+  "call:offer": (payload: {
+    to: string;
+    conversationId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => void;
+  // 接受通话（回复 answer）
+  "call:answer": (payload: {
+    to: string;
+    answer: RTCSessionDescriptionInit;
+  }) => void;
+  // 交换 ICE 候选
+  "call:ice-candidate": (payload: {
+    to: string;
+    candidate: RTCIceCandidateInit;
+  }) => void;
+  // 拒绝来电
+  "call:reject": (payload: { to: string }) => void;
+  // 结束通话（挂断）
+  "call:end": (payload: { to: string }) => void;
 }
 
 /** 服务端 → 客户端 */
@@ -212,4 +245,31 @@ export interface ServerToClientEvents {
     color: AvatarColor;
     avatarUrl?: string;
   }) => void;
+  // 群聊成员变更（加入/退出/被移除）— 通知相关成员刷新群信息
+  "group:members:updated": (payload: {
+    groupId: string;
+    conversation: Conversation;
+  }) => void;
+  // ── WebRTC 语音通话信令 ──
+  // 收到通话邀请
+  "call:offer": (payload: {
+    from: string;
+    fromName: string;
+    conversationId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => void;
+  // 通话被接受（收到 answer）
+  "call:answer": (payload: {
+    from: string;
+    answer: RTCSessionDescriptionInit;
+  }) => void;
+  // 收到 ICE 候选
+  "call:ice-candidate": (payload: {
+    from: string;
+    candidate: RTCIceCandidateInit;
+  }) => void;
+  // 通话被拒绝
+  "call:reject": (payload: { from: string }) => void;
+  // 通话被对方挂断
+  "call:end": (payload: { from: string }) => void;
 }

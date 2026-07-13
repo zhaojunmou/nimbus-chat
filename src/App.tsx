@@ -6,6 +6,8 @@ import VoiceCall from "@/pages/VoiceCall";
 import ContactsManagement from "@/pages/ContactsManagement";
 import AddContact from "@/pages/AddContact";
 import ContactProfile from "@/pages/ContactProfile";
+import CreateGroup from "@/pages/CreateGroup";
+import GroupDetail from "@/pages/GroupDetail";
 import SearchNotifications from "@/pages/SearchNotifications";
 import SettingsProfile from "@/pages/SettingsProfile";
 import EditProfile from "@/pages/EditProfile";
@@ -20,6 +22,7 @@ import AdminMessages from "@/pages/admin/AdminMessages";
 import AdminContacts from "@/pages/admin/AdminContacts";
 import AdminNotifications from "@/pages/admin/AdminNotifications";
 import { useAppStore } from "@/store";
+import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 
 /** 路由守卫 — 未登录跳转 /login，认证初始化中显示 loading */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -64,6 +67,7 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Router>
+      <IncomingCallDialog />
       <Routes>
         {/* 认证页（无需登录） */}
         <Route path="/login" element={<Login />} />
@@ -115,6 +119,22 @@ export default function App() {
           element={
             <RequireAuth>
               <ContactProfile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/groups/new"
+          element={
+            <RequireAuth>
+              <CreateGroup />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/groups/:id"
+          element={
+            <RequireAuth>
+              <GroupDetail />
             </RequireAuth>
           }
         />
