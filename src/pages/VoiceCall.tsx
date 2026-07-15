@@ -38,7 +38,6 @@ export default function VoiceCall() {
 
   const callStatus = useCallStore((s) => s.status);
   const peerName = useCallStore((s) => s.peerName);
-  const peerId = useCallStore((s) => s.peerId);
   const muted = useCallStore((s) => s.muted);
   const callConvId = useCallStore((s) => s.conversationId);
   const micAvailable = useCallStore((s) => s.micAvailable);

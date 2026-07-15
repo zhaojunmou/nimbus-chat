@@ -78,10 +78,7 @@ export default function CreateGroup() {
     : contacts;
 
   const selectedCount = selected.size;
-  const canSubmit =
-    !submitting &&
-    selectedCount > 0 &&
-    (mode === "invite" || groupName.trim().length > 0);
+  const canSubmit = !submitting && selectedCount > 0;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -141,6 +138,9 @@ export default function CreateGroup() {
             <div className="mb-6">
               <label className="block text-[12px] font-medium text-text-secondary mb-2">
                 {t("group.groupName")}
+                <span className="text-text-tertiary font-normal ml-1">
+                  ({t("common.optional")})
+                </span>
               </label>
               <Input
                 value={groupName}

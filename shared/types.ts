@@ -1,4 +1,5 @@
 // 前后端共享类型定义
+/// <reference lib="dom" />
 
 /** 头像配色循环 */
 export type AvatarColor =

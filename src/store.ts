@@ -801,13 +801,13 @@ function subscribeRealtime(
   // 对方拒接
   onCallReject(({ from }) => {
     console.log("[socket] call:reject from", from);
-    useCallStore.getState().onRemoteReject(from);
+    useCallStore.getState().onRemoteReject();
   });
 
   // 对方挂断
   onCallEnd(({ from }) => {
     console.log("[socket] call:end from", from);
-    useCallStore.getState().onRemoteEnd(from);
+    useCallStore.getState().onRemoteEnd();
   });
 }
 

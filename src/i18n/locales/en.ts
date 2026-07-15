@@ -17,6 +17,7 @@ export const en = {
     today: "Today",
     yesterday: "Yesterday",
     retry: "Retry loading",
+    optional: "optional",
   },
   auth: {
     brandName: "Nimbus Chat",

@@ -12,7 +12,6 @@ import {
   Image as ImageIcon,
   Ban,
   Trash,
-  UserCircle,
 } from "lucide-react";
 import { AppLayout, PageScroll } from "@/components/AppLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -24,7 +23,6 @@ import { useToast } from "@/components/Toast";
 import { api } from "@/api/client";
 import { useAppStore } from "@/store";
 import type { Contact } from "@/types";
-import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
 /** 联系人资料 — 头卡 + 联系信息 + 共享群组 + 共享媒体 */

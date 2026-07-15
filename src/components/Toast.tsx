@@ -91,7 +91,7 @@ export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) {
     // 不在 Provider 内时给出 no-op 兜底，避免崩溃
-    return { toast: (_msg: string, _type?: ToastType) => {} };
+    return { toast: () => {} };
   }
   return ctx;
 }

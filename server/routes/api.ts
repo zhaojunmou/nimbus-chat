@@ -336,7 +336,7 @@ export function createApiRouter(
 
   // 获取群聊信息
   apiRouter.get("/groups/:id", (req, res) => {
-    const group = svc.getGroup(req.params.id);
+    const group = svc.getGroup(req.params.id as string);
     if (!group) {
       res.status(404).json({ error: "Group not found" });
       return;
@@ -346,7 +346,7 @@ export function createApiRouter(
 
   // 获取群成员列表
   apiRouter.get("/groups/:id/members", (req, res) => {
-    const members = svc.getGroupMembers(req.params.id);
+    const members = svc.getGroupMembers(req.params.id as string);
     res.json(members);
   });
 
@@ -354,7 +354,7 @@ export function createApiRouter(
   apiRouter.post("/groups/:id/members", (req: AuthedRequest, res: Response) => {
     const userId = getRequestUserId(req)!;
     const { memberIds } = req.body as { memberIds: string[] };
-    const result = svc.addGroupMember(req.params.id, userId, memberIds);
+    const result = svc.addGroupMember(req.params.id as string, userId, memberIds);
     if ("error" in result) {
       res.status(400).json({ error: result.error });
       return;
@@ -365,7 +365,7 @@ export function createApiRouter(
   // 移除群成员
   apiRouter.delete("/groups/:id/members/:userId", (req: AuthedRequest, res: Response) => {
     const operatorId = getRequestUserId(req)!;
-    const result = svc.removeGroupMember(req.params.id, operatorId, req.params.userId);
+    const result = svc.removeGroupMember(req.params.id as string, operatorId, req.params.userId as string);
     if ("error" in result) {
       res.status(400).json({ error: result.error });
       return;
@@ -376,7 +376,7 @@ export function createApiRouter(
   // 退出群聊
   apiRouter.post("/groups/:id/leave", (req: AuthedRequest, res: Response) => {
     const userId = getRequestUserId(req)!;
-    const result = svc.leaveGroup(req.params.id, userId);
+    const result = svc.leaveGroup(req.params.id as string, userId);
     if ("error" in result) {
       res.status(400).json({ error: result.error });
       return;
@@ -388,7 +388,7 @@ export function createApiRouter(
   apiRouter.patch("/groups/:id", (req: AuthedRequest, res: Response) => {
     const userId = getRequestUserId(req)!;
     const { name } = req.body as { name?: string };
-    const result = svc.updateGroupInfo(req.params.id, userId, { name });
+    const result = svc.updateGroupInfo(req.params.id as string, userId, { name });
     if ("error" in result) {
       res.status(400).json({ error: result.error });
       return;

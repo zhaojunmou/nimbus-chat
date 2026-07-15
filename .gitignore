@@ -20,6 +20,10 @@ server/data/store.json
 .uploads/
 .trae/
 
+# 部署相关
+.env
+logs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

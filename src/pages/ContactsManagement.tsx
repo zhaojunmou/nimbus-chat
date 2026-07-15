@@ -25,11 +25,9 @@ export default function ContactsManagement() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     api
       .getContacts()
       .then((data) => {
@@ -37,9 +35,6 @@ export default function ContactsManagement() {
       })
       .catch(() => {
         if (!cancelled) toast(t("contacts.failedToLoad"), "error");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;

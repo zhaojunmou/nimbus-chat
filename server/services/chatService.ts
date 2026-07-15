@@ -38,6 +38,11 @@ function emitToUser(
     avatarUrl?: string;
   },
 ): void;
+function emitToUser(
+  userId: string,
+  event: "group:members:updated",
+  payload: { groupId: string; conversation: import("../../shared/types.js").Conversation },
+): void;
 function emitToUser(userId: string, event: string, payload: unknown): void {
   if (!ioRef) return;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -619,17 +624,29 @@ export function createGroup(
   name: string,
   memberIds: string[],
 ): Conversation | { error: string } {
-  const trimmed = name.trim();
-  if (!trimmed) return { error: "Group name is required" };
   if (memberIds.length === 0) return { error: "At least one member is required" };
+
+  // 全部成员 id（含群主）
+  const allMembers = Array.from(new Set([ownerUserId, ...memberIds]));
+
+  // 群名可选 — 未填时用成员显示名自动生成（如 "Alice, Bob & 2 others"）
+  let trimmed = name.trim();
+  if (!trimmed) {
+    const memberNames = allMembers
+      .slice(0, 3)
+      .map((id) => getAccountByIdPublic(id)?.displayName ?? id)
+      .filter(Boolean);
+    const extra = allMembers.length - memberNames.length;
+    trimmed = extra > 0
+      ? `${memberNames.join(", ")} & ${extra} more`
+      : memberNames.join(", ");
+    if (!trimmed) trimmed = `Group ${allMembers.length}`;
+  }
 
   // 群组 id（用 nanoid 生成，加 "group-" 前缀避免与用户 id 冲突）
   const groupId = `group-${nanoid(8)}`;
   const initials = trimmed.slice(0, 2).toUpperCase();
   const color = groupColorCycle[Math.floor(Math.random() * groupColorCycle.length)];
-
-  // 全部成员 id（含群主）
-  const allMembers = Array.from(new Set([ownerUserId, ...memberIds]));
 
   // 1. 创建群组 Contact（全局共享，所有成员都能看到）
   const groupContact: Contact = {

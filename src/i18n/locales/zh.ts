@@ -19,6 +19,7 @@ export const zh: Translations = {
     today: "今天",
     yesterday: "昨天",
     retry: "重试加载",
+    optional: "可选",
   },
   auth: {
     brandName: "Nimbus Chat",

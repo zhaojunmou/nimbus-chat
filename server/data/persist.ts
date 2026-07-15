@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = join(__dirname, "store.json");
+// 支持通过 DATA_DIR 环境变量指定数据目录（生产环境用）
+// 默认使用源码同级目录
+const DATA_DIR = process.env.DATA_DIR ?? __dirname;
+const DATA_FILE = join(DATA_DIR, "store.json");
 
 /** 持久化的数据结构 */
 export interface PersistedState {

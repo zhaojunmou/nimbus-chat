@@ -68,8 +68,8 @@ interface CallState {
     from: string,
     candidate: RTCIceCandidateInit,
   ) => void;
-  onRemoteReject: (from: string) => void;
-  onRemoteEnd: (from: string) => void;
+  onRemoteReject: () => void;
+  onRemoteEnd: () => void;
 }
 
 // ── 模块级变量（不可序列化的 WebRTC 资源） ──
@@ -187,12 +187,18 @@ function cleanupWebRTC() {
         pc.getSenders().forEach((s) => {
           try {
             s.track?.stop();
-          } catch {}
+          } catch {
+            /* ignore */
+          }
         });
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       try {
         pc.close();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       pc = null;
     }
   } catch (err) {
@@ -204,7 +210,9 @@ function cleanupWebRTC() {
       localStream.getTracks().forEach((t) => {
         try {
           t.stop();
-        } catch {}
+        } catch {
+          /* ignore */
+        }
       });
       localStream = null;
     }
@@ -558,7 +566,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 
   // 对方拒接
-  onRemoteReject: (_from) => {
+  onRemoteReject: () => {
     const { status } = get();
     // 同一时间只会有一个通话 — 不检查 from，避免 userId 不匹配导致事件被丢弃
     if (status === "idle" || status === "ended" || status === "rejected") return;
@@ -576,7 +584,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 
   // 对方挂断
-  onRemoteEnd: (_from) => {
+  onRemoteEnd: () => {
     const { status } = get();
     if (status === "idle" || status === "ended" || status === "rejected") return;
     console.log("[call] remote ended");

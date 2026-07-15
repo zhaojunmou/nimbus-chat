@@ -14,7 +14,7 @@ import { registerSocketHandlers } from "./socket/handlers.js";
 import { initRealtime } from "./services/chatService.js";
 import { persistDbNow } from "./data/store.js";
 
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 const app = express();
 app.use(cors());
