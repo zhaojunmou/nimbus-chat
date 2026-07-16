@@ -181,8 +181,31 @@ export default function SettingsProfile() {
       <PageScroll className="px-6 pt-6 pb-10" maxWidth={960}>
         {/* 资料卡 */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="mb-4" style={{ padding: 3, background: "var(--bg-brand)", borderRadius: "50%" }}>
-            <div style={{ padding: 3, background: "var(--bg-base-default)", borderRadius: "50%" }}>
+          <div
+            className="mb-4"
+            style={{
+              padding: 3,
+              width: 76,
+              height: 76,
+              background: "var(--bg-brand)",
+              borderRadius: "50%",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                padding: 3,
+                width: 70,
+                height: 70,
+                background: "var(--bg-base-default)",
+                borderRadius: "50%",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <Avatar
                 initials={user?.initials ?? "Y"}
                 color={user?.color ?? "brand"}
@@ -279,6 +302,11 @@ export default function SettingsProfile() {
             label={t("settings.storageUsage")}
             value={t("settings.storageValue")}
             onClick={() => navigate("/settings/storage")}
+          />
+          <div className="h-px bg-border-neutral" />
+          <SettingRow
+            label={t("nav.files")}
+            onClick={() => navigate("/files")}
           />
           <div className="h-px bg-border-neutral" />
           <SettingRow

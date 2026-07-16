@@ -16,6 +16,7 @@ import {
   Shield,
   ChevronDown,
   UserPlus,
+  FolderOpen,
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Modal } from "./Modal";
@@ -220,7 +221,7 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
         "w-[320px] flex-shrink-0 flex flex-col bg-bg-surface border-r border-border-neutral",
         showOnMobile
           ? "w-full"
-          : "hidden lg:flex",
+          : "hidden md:flex",
       )}
     >
       {/* 顶部 Header */}
@@ -397,6 +398,23 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
               {incomingRequests.length}
             </span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            navigate("/files");
+            setSidebarOpen(false);
+          }}
+          className={cn(
+            "p-1 rounded-[var(--radius-6)] cursor-pointer transition-colors duration-150",
+            location.pathname === "/files"
+              ? "text-brand"
+              : "text-text-tertiary hover:text-text-default",
+          )}
+          aria-label={t("nav.files")}
+          title={t("nav.files")}
+        >
+          <FolderOpen size={18} />
         </button>
         {user?.role === "admin" && (
           <button

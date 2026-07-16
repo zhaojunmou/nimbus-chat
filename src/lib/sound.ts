@@ -78,7 +78,7 @@ function playTone(
 
 /** 播放指定类型音效（受 soundNoti 偏好控制） */
 export function playSound(
-  kind: "message" | "friendRequest" | "friendAccepted",
+  kind: "message" | "friendRequest" | "friendAccepted" | "broadcast",
 ): void {
   // 偏好关闭 → 不播放
   if (!getPreferences().soundNoti) return;
@@ -105,6 +105,13 @@ export function playSound(
       playTone(ctx, 659.25, now, 0.1);
       playTone(ctx, 880, now + 0.09, 0.1);
       playTone(ctx, 1046.5, now + 0.18, 0.2);
+      break;
+    case "broadcast":
+      // 系统广播：浑厚四音下行 784 → 659 → 523 → 392
+      playTone(ctx, 783.99, now, 0.14);
+      playTone(ctx, 659.25, now + 0.12, 0.14);
+      playTone(ctx, 523.25, now + 0.24, 0.14);
+      playTone(ctx, 392.0, now + 0.36, 0.22);
       break;
   }
 }

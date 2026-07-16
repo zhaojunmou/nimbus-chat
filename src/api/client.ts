@@ -183,7 +183,29 @@ export const api = {
         notifications: number;
         friendRequests: number;
         onlineUsers: number;
+        activeUsers7d: number;
+        newUsers7d: number;
+        disabledUsers: number;
+        adminUsers: number;
       }>("/admin/stats"),
+    getAnalytics: () =>
+      get<{
+        newUsersByDay: { date: string; count: number }[];
+        messagesByDay: { date: string; count: number }[];
+        activeUsers7d: number;
+        totalUsers: number;
+        recentUsers: {
+          id: string;
+          displayName: string;
+          email: string;
+          initials: string;
+          color: import("../../shared/types").AvatarColor;
+          avatarUrl?: string;
+          role: "user" | "admin";
+          disabled?: boolean;
+          createdAt?: string;
+        }[];
+      }>("/admin/analytics"),
     getUsers: () => get<AuthUser[]>("/admin/users"),
     updateUser: (id: string, patch: Partial<AuthUser>) =>
       patchReq<AuthUser>(`/admin/users/${id}`, patch),
@@ -201,6 +223,11 @@ export const api = {
     getNotifications: () => get<NotificationItem[]>("/admin/notifications"),
     deleteNotification: (id: string) =>
       del<{ ok: boolean }>(`/admin/notifications/${id}`),
+    broadcastNotification: (title: string, content: string) =>
+      post<{ ok: boolean; count: number }>("/admin/notifications/broadcast", {
+        title,
+        content,
+      }),
     getFriendRequests: () => get<FriendRequest[]>("/admin/friend-requests"),
     deleteFriendRequest: (id: string) =>
       del<{ ok: boolean }>(`/admin/friend-requests/${id}`),

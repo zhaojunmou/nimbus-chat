@@ -96,6 +96,7 @@ export function createMessage(
     timestamp: now(),
     isRead: false,
     seq: db.messageSeq,
+    createdAt: new Date().toISOString(),
     ...(imageUrl ? { imageUrl } : {}),
     ...(fileName ? { fileName } : {}),
     ...(call ? { call } : {}),

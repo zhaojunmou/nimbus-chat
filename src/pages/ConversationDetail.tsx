@@ -23,17 +23,27 @@ import {
   PhoneMissed,
   PhoneIncoming,
   PhoneOutgoing,
+  Forward,
+  Download,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { Avatar } from "@/components/Avatar";
 import { IconButton } from "@/components/IconButton";
-import { ConfirmDialog } from "@/components/Modal";
+import { Modal, ConfirmDialog } from "@/components/Modal";
+import { ImagePreview } from "@/components/ImagePreview";
 import { useToast } from "@/components/Toast";
 import { EmojiPicker } from "@/components/EmojiPicker";
 import { useAppStore } from "@/store";
-import { startTyping, stopTyping } from "@/api/socket";
+import { startTyping, stopTyping, sendMessage } from "@/api/socket";
+import { api } from "@/api/client";
 import { conversations as fallbackConvs } from "@/mockData";
 import { cn } from "@/lib/utils";
+import {
+  loadCustomEmojis,
+  saveCustomEmojis,
+  addCustomEmoji,
+} from "@/lib/emojiPresets";
+import type { Contact } from "@/types";
 
 /** 对话详情 — 消息流 + 输入区 + 通话入口（接入实时 socket） */
 export default function ConversationDetail() {
@@ -51,6 +61,7 @@ export default function ConversationDetail() {
   const loadMessages = useAppStore((s) => s.loadMessages);
   const sendText = useAppStore((s) => s.sendText);
   const sendImage = useAppStore((s) => s.sendImage);
+  const ensureConversation = useAppStore((s) => s.ensureConversation);
   const setActive = useAppStore((s) => s.setActiveConversation);
   const typingMap = useAppStore((s) => s.typingMap);
   const togglePin = useAppStore((s) => s.togglePin);
@@ -79,6 +90,9 @@ export default function ConversationDetail() {
 
   // 图片预览（lightbox）
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // 转发图片：选会话弹框
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardContacts, setForwardContacts] = useState<Contact[]>([]);
 
   useEffect(() => {
     if (!menu) return;
@@ -165,6 +179,35 @@ export default function ConversationDetail() {
     }
   };
 
+  // 打开转发弹框 — 拉取联系人列表
+  const openForward = () => {
+    api.getContacts().then(setForwardContacts).catch(() => {});
+    setForwardOpen(true);
+  };
+
+  // 转发当前预览图片到指定联系人（对应的会话）
+  const handleForwardTo = async (contact: Contact) => {
+    if (!previewImage) return;
+    try {
+      const target = await ensureConversation(contact.id);
+      // 直接通过 socket 发送图片 data URL，避免二次压缩
+      sendMessage(target.id, "", previewImage, "forwarded.jpg");
+      setForwardOpen(false);
+      toast(t("conversation.forwardedTo", { name: contact.name }), "success");
+    } catch {
+      toast(t("conversation.forwardFailed"), "error");
+    }
+  };
+
+  // 把当前预览图片添加为自定义表情
+  const handleAddAsEmoji = () => {
+    if (!previewImage) return;
+    const list = loadCustomEmojis();
+    const { list: newList } = addCustomEmoji(list, previewImage);
+    saveCustomEmojis(newList);
+    toast(t("emoji.added"), "success");
+  };
+
   // 文件选择：图片走 sendImage 真正发送图片消息，非图片作为文本发送文件名
   const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -238,7 +281,7 @@ export default function ConversationDetail() {
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-secondary hover:bg-[var(--bg-overlay-l2)] cursor-pointer"
+            className="md:hidden inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-secondary hover:bg-[var(--bg-overlay-l2)] cursor-pointer"
             aria-label={t("conversation.backLabel")}
           >
             <ArrowLeft size={18} />
@@ -657,39 +700,88 @@ export default function ConversationDetail() {
         onCancel={() => setConfirmDelete(false)}
       />
 
-      {/* 图片预览 lightbox */}
+      {/* 图片预览 lightbox — 支持滚轮缩放、拖动平移 */}
       {previewImage && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 animate-fade-in"
-          onClick={() => setPreviewImage(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 cursor-pointer transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              setPreviewImage(null);
-            }}
-            aria-label={t("common.close")}
-          >
-            <X size={20} />
-          </button>
-          <img
-            src={previewImage}
-            alt="preview"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[var(--radius-8)]"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <a
-            href={previewImage}
-            download={previewImage.startsWith("data:") ? "image.jpg" : undefined}
-            className="absolute bottom-5 px-4 py-2 rounded-[var(--radius-8)] bg-white/15 text-white text-[13px] hover:bg-white/25 cursor-pointer transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {t("conversation.download")}
-          </a>
-        </div>
+        <ImagePreview
+          src={previewImage}
+          onClose={() => setPreviewImage(null)}
+          closeLabel={t("common.close")}
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={openForward}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-8)] bg-white/15 text-white text-[12px] hover:bg-white/25 cursor-pointer transition-colors"
+              >
+                <Forward size={14} />
+                {t("conversation.forward")}
+              </button>
+              <button
+                type="button"
+                onClick={handleAddAsEmoji}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-8)] bg-white/15 text-white text-[12px] hover:bg-white/25 cursor-pointer transition-colors"
+              >
+                <Smile size={14} />
+                {t("conversation.addAsEmoji")}
+              </button>
+              <a
+                href={previewImage}
+                download={previewImage.startsWith("data:") ? "image.jpg" : undefined}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-8)] bg-white/15 text-white text-[12px] hover:bg-white/25 cursor-pointer transition-colors"
+              >
+                <Download size={14} />
+                {t("conversation.download")}
+              </a>
+            </>
+          }
+        />
       )}
+
+      {/* 转发选会话弹框 */}
+      <Modal
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
+        title={t("conversation.forwardTo")}
+        className="max-w-[360px]"
+      >
+        <div className="flex flex-col gap-1 max-h-[360px] overflow-y-auto thin-scrollbar">
+          {forwardContacts.length === 0 ? (
+            <div className="text-center text-text-tertiary py-8 text-[12px]">
+              {t("conversation.noContactsToForward")}
+            </div>
+          ) : (
+            forwardContacts.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleForwardTo(c)}
+                className="flex items-center gap-3 w-full px-2 py-2 rounded-[var(--radius-8)] hover:bg-[var(--bg-overlay-l1)] cursor-pointer transition-colors duration-100 text-left"
+              >
+                <Avatar
+                  initials={c.initials}
+                  color={c.color}
+                  size="md"
+                  imageUrl={c.avatarUrl}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] text-text-default truncate">
+                    {c.name}
+                  </div>
+                  {c.isGroup ? (
+                    <div className="text-[11px] text-text-tertiary truncate">
+                      {t("common.members", { count: c.memberCount ?? 0 })}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-text-tertiary truncate">
+                      {c.lastSeen}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </Modal>
     </AppLayout>
   );
 }

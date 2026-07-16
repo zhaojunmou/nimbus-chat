@@ -58,11 +58,12 @@ export default function AdminConversations() {
   };
 
   return (
-    <div className="min-h-screen flex bg-bg-base">
+    <div className="h-screen flex bg-bg-base overflow-hidden">
       <AdminNav />
-      <main className="flex-1 overflow-y-auto">
-        <div className="px-8 py-6" style={{ maxWidth: 1200 }}>
-          <div className="flex items-center justify-between gap-4 mb-5">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* 头部 — 固定不滚动 */}
+        <div className="flex-shrink-0 px-8 pt-6 pb-4 border-b border-border-neutral">
+          <div className="flex items-center justify-between gap-4" style={{ maxWidth: 1200 }}>
             <h1 className="text-[14px] font-semibold font-heading text-text-default">
               {t("admin.conversations")}
             </h1>
@@ -75,25 +76,29 @@ export default function AdminConversations() {
               />
             </div>
           </div>
+        </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 size={24} className="text-brand animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-status-error">
-              <AlertCircle size={16} />
-              {error}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-16 text-[13px] text-text-tertiary">
-              {t("admin.noData")}
-            </div>
-          ) : (
-            <div className="rounded-[var(--radius-10)] border border-border-neutral overflow-hidden bg-bg-surface">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-bg-tertiary">
+        {/* 列表区 — 仅此区域滚动 */}
+        <div className="flex-1 overflow-y-auto px-8 py-4">
+          <div style={{ maxWidth: 1200 }}>
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 size={24} className="text-brand animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-status-error">
+                <AlertCircle size={16} />
+                {error}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-16 text-[13px] text-text-tertiary">
+                {t("admin.noData")}
+              </div>
+            ) : (
+              <div className="rounded-[var(--radius-10)] border border-border-neutral overflow-hidden bg-bg-surface">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-bg-tertiary">
                     <th className="text-left text-[11px] uppercase font-semibold text-text-tertiary px-4 py-3">
                       {t("admin.name")}
                     </th>
@@ -168,6 +173,7 @@ export default function AdminConversations() {
               </table>
             </div>
           )}
+          </div>
         </div>
       </main>
 

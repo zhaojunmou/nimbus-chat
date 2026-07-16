@@ -4,6 +4,7 @@ export type {
   Conversation,
   Message,
   Contact,
+  FriendRequest,
   NotificationItem,
   User,
   AuthUser,

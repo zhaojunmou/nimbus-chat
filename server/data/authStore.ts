@@ -31,7 +31,7 @@ const colorCycle: AvatarColor[] = [
   "teal",
 ];
 
-/** 种子账号 */
+/** 种子账号 — 仅保留管理员，其余用户通过注册创建 */
 const seedAccounts: AccountRecord[] = [
   {
     id: "you",
@@ -43,18 +43,6 @@ const seedAccounts: AccountRecord[] = [
     bio: "Hey there! I'm using Nimbus Chat.",
     phone: "+1 (555) 0123",
     role: "admin",
-    passwordHash: bcrypt.hashSync("demo1234", 10),
-  },
-  {
-    id: "alex",
-    email: "alex.chen@techcorp.com",
-    displayName: "Alex Chen",
-    initials: "AC",
-    color: "brand",
-    statusMessage: "Designing",
-    bio: "Building beautiful interfaces.",
-    phone: "+1 (555) 0456",
-    role: "user",
     passwordHash: bcrypt.hashSync("demo1234", 10),
   },
 ];
@@ -122,6 +110,7 @@ export function registerAccount(
     phone: "",
     role: "user",
     passwordHash: bcrypt.hashSync(payload.password, 10),
+    createdAt: new Date().toISOString(),
   };
   accounts.push(record);
   persist();
@@ -141,6 +130,15 @@ export function loginAccount(
   if (!record) return { error: "Account not found" };
   if (!bcrypt.compareSync(payload.password, record.passwordHash)) {
     return { error: "Incorrect password" };
+  }
+  // 禁用账号拒绝登录
+  if (record.disabled) {
+    return { error: "Account disabled. Please contact administrator." };
+  }
+  // 补全旧账号缺失的 createdAt 字段
+  if (!record.createdAt) {
+    record.createdAt = new Date().toISOString();
+    persist();
   }
   const token = signToken(record.id);
   return { user: toAuthUser(record), token };
@@ -236,6 +234,7 @@ export function adminUpdateAccount(
     "phone",
     "color",
     "role",
+    "disabled",
     "avatarUrl",
   ];
   const safePatch: Partial<AuthUser> = {};

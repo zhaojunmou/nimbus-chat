@@ -61,6 +61,8 @@ export interface Message {
     /** 是否为发起方 */
     isCaller: boolean;
   };
+  /** 消息创建时间（ISO 字符串）— 用于统计消息活跃度趋势 */
+  createdAt?: string;
 }
 
 /** 联系人 */
@@ -174,8 +176,12 @@ export interface AuthUser {
   phone: string;
   /** 账号角色：普通用户 / 管理员 */
   role: "user" | "admin";
+  /** 账号是否被禁用（管理员操作）— 禁用后无法登录 */
+  disabled?: boolean;
   /** 头像图片 data URL（存在时优先于首字母渲染） */
   avatarUrl?: string;
+  /** 账号创建时间（ISO 字符串）— 用于统计新增用户趋势 */
+  createdAt?: string;
 }
 
 /* ── Socket.IO 事件定义 ── */
@@ -261,6 +267,8 @@ export interface ServerToClientEvents {
     groupId: string;
     conversation: Conversation;
   }) => void;
+  // 系统广播通知（管理员发送）— 所有在线用户实时收到
+  "notification:broadcast": (notification: NotificationItem) => void;
   // ── WebRTC 语音通话信令 ──
   // 收到通话邀请
   "call:offer": (payload: {

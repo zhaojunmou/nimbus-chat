@@ -5,6 +5,7 @@ import type {
   Message,
   Conversation,
   FriendRequest,
+  NotificationItem,
   AvatarColor,
 } from "../../shared/types";
 import { getToken, clearToken } from "./token";
@@ -171,6 +172,15 @@ export function onGroupMembersUpdated(
   const s = connectSocket();
   s.on("group:members:updated", cb);
   return () => s.off("group:members:updated", cb);
+}
+
+/** 订阅系统广播通知（管理员发送）— 实时收到并展示 */
+export function onBroadcastNotification(
+  cb: (n: NotificationItem) => void,
+): () => void {
+  const s = connectSocket();
+  s.on("notification:broadcast", cb);
+  return () => s.off("notification:broadcast", cb);
 }
 
 // ── 主动发送事件 ──

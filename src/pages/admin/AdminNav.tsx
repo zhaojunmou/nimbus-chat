@@ -10,6 +10,7 @@ import {
   Bell,
   ArrowLeft,
   Contact,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,11 @@ const navItems: NavItem[] = [
     key: "admin.notifications",
     path: "/admin/notifications",
     icon: <Bell size={16} />,
+  },
+  {
+    key: "admin.friendRequests",
+    path: "/admin/friend-requests",
+    icon: <UserPlus size={16} />,
   },
 ];
 

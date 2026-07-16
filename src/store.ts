@@ -26,6 +26,7 @@ import {
   onFriendRequestUpdate,
   onProfileUpdated,
   onGroupMembersUpdated,
+  onBroadcastNotification,
   onCallOffer,
   onCallAnswer,
   onCallIceCandidate,
@@ -726,6 +727,14 @@ function subscribeRealtime(
   onFriendRequestNew(() => {
     get().loadFriendRequests();
     playSound("friendRequest");
+  });
+
+  // 系统广播通知（管理员发送）→ 追加到通知列表 + 播放广播提示音
+  onBroadcastNotification((n) => {
+    set((s) => ({
+      notifications: [n, ...s.notifications],
+    }));
+    playSound("broadcast");
   });
 
   // 好友请求状态变更（对方接受/拒绝）→ 刷新请求列表 + 同意时播放提示音

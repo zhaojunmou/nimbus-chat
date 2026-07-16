@@ -32,10 +32,10 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
       {sidebarOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="fixed inset-y-0 left-0 z-50 flex lg:hidden animate-fade-in">
+          <div className="fixed inset-y-0 left-0 z-50 flex md:hidden animate-fade-in">
             <Sidebar showOnMobile />
           </div>
         </>
@@ -44,7 +44,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col min-w-0 bg-bg-base relative">
         {/* 移动端顶部栏 */}
-        <div className="lg:hidden flex items-center gap-3 h-12 px-3 border-b border-border-neutral bg-bg-surface flex-shrink-0">
+        <div className="md:hidden flex items-center gap-3 h-12 px-3 border-b border-border-neutral bg-bg-surface flex-shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -77,12 +77,13 @@ function getPageTitle(path: string, t: (k: string) => string): string {
   if (path === "/settings/profile") return t("nav.editProfile");
   if (path === "/settings/privacy") return t("nav.privacySecurity");
   if (path === "/settings/storage") return t("nav.storageData");
+  if (path === "/files") return t("nav.files");
   return t("nav.nimbusChat");
 }
 
 /** 移动端遮罩判断 — 仅当需要时显示移动顶栏 */
 export function useIsMobile() {
-  return typeof window !== "undefined" && window.innerWidth < 1024;
+  return typeof window !== "undefined" && window.innerWidth < 768;
 }
 
 /** 给主区域容器加统一的滚动与最大宽度 */

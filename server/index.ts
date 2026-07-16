@@ -32,8 +32,8 @@ app.use("/api/auth", createAuthRouter());
 // 业务 API 路由（需 token）— 注入 io 用于模拟对方回复广播
 app.use("/api", authMiddleware, createApiRouter(io));
 
-// 管理后台 API 路由（需 token + 管理员权限）
-app.use("/api/admin", authMiddleware, requireAdmin, createAdminRouter());
+// 管理后台 API 路由（需 token + 管理员权限）— 注入 io 用于广播系统通知
+app.use("/api/admin", authMiddleware, requireAdmin, createAdminRouter(io));
 
 // 健康检查
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));

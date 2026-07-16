@@ -62,7 +62,7 @@ export default function StorageData() {
       label: t("storage.reviewLargeFiles"),
       value: null,
       action: t("storage.review"),
-      onClick: () => toast(t("storage.scanningLargeFiles"), "info"),
+      onClick: () => navigate("/files"),
     },
   ];
 

@@ -13,6 +13,7 @@ import SettingsProfile from "@/pages/SettingsProfile";
 import EditProfile from "@/pages/EditProfile";
 import PrivacySecurity from "@/pages/PrivacySecurity";
 import StorageData from "@/pages/StorageData";
+import FilesManagement from "@/pages/FilesManagement";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -21,6 +22,7 @@ import AdminConversations from "@/pages/admin/AdminConversations";
 import AdminMessages from "@/pages/admin/AdminMessages";
 import AdminContacts from "@/pages/admin/AdminContacts";
 import AdminNotifications from "@/pages/admin/AdminNotifications";
+import AdminFriendRequests from "@/pages/admin/AdminFriendRequests";
 import { useAppStore } from "@/store";
 import { IncomingCallDialog } from "@/components/IncomingCallDialog";
 
@@ -178,6 +180,14 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/files"
+          element={
+            <RequireAuth>
+              <FilesManagement />
+            </RequireAuth>
+          }
+        />
 
         {/* 管理后台（需管理员权限） */}
         <Route
@@ -225,6 +235,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminNotifications />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/friend-requests"
+          element={
+            <RequireAdmin>
+              <AdminFriendRequests />
             </RequireAdmin>
           }
         />
