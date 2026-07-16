@@ -47,6 +47,7 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
   const mute = useAppStore((s) => s.toggleMute);
   const ensureConversation = useAppStore((s) => s.ensureConversation);
   const user = useAppStore((s) => s.user);
+  const myOnline = useAppStore((s) => s.myOnline);
   const incomingRequests = useAppStore((s) => s.incomingRequests);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const { toast } = useToast();
@@ -355,6 +356,7 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
           color={user?.color ?? "brand"}
           size="md"
           imageUrl={user?.avatarUrl}
+          status={myOnline ? "online" : "offline"}
         />
         <span className="flex-1 text-[13px] font-medium text-text-default truncate">
           {user?.displayName ?? t("common.you")}

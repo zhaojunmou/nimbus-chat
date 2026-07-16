@@ -29,6 +29,13 @@ export function registerSocketAuthFailedHandler(fn: () => void) {
   onAuthFailed = fn;
 }
 
+// 连接状态变化回调（由 store 注册，用于更新当前用户在线状态指示）
+let onConnectionChange: ((connected: boolean) => void) | null = null;
+
+export function registerConnectionChangeHandler(fn: (connected: boolean) => void) {
+  onConnectionChange = fn;
+}
+
 /** 记录当前活动会话，供重连后重新加入房间 */
 export function setActiveConversationForReconnect(id: string | null) {
   lastActiveConversationId = id;
@@ -51,9 +58,11 @@ export function connectSocket(): AppSocket {
     if (lastActiveConversationId) {
       socket?.emit("conversation:join", lastActiveConversationId);
     }
+    onConnectionChange?.(true);
   });
   socket.on("disconnect", (reason) => {
     console.log("[socket] disconnected", reason);
+    onConnectionChange?.(false);
   });
   socket.on("connect_error", (err) => {
     console.warn("[socket] connect error", err.message);

@@ -7,6 +7,8 @@ interface AvatarProps {
   color: AvatarColor;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   online?: boolean;
+  /** 显式在线状态指示 — "online" 显示绿点，"offline" 显示灰点；优先级高于 online */
+  status?: "online" | "offline";
   square?: boolean;
   className?: string;
   /** 头像图片 URL（存在时优先于首字母渲染） */
@@ -27,6 +29,7 @@ export function Avatar({
   color,
   size = "lg",
   online = false,
+  status,
   square = false,
   className,
   imageUrl,
@@ -73,7 +76,7 @@ export function Avatar({
           {initials}
         </span>
       )}
-      {online && (
+      {(status || online) && (
         <span
           style={{
             position: "absolute",
@@ -82,7 +85,12 @@ export function Avatar({
             width: size === "2xl" || size === "xl" ? 14 : 10,
             height: size === "2xl" || size === "xl" ? 14 : 10,
             borderRadius: "50%",
-            background: "var(--status-primary-default)",
+            background:
+              status === "offline"
+                ? "var(--text-tertiary)"
+                : status === "online"
+                  ? "var(--status-success-default)"
+                  : "var(--status-primary-default)",
             border: `2px solid var(--bg-base-secondary)`,
           }}
         />

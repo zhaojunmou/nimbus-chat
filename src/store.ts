@@ -32,6 +32,7 @@ import {
   onCallReject,
   onCallEnd,
   registerSocketAuthFailedHandler,
+  registerConnectionChangeHandler,
   setActiveConversationForReconnect,
   getSocket,
 } from "./api/socket";
@@ -101,6 +102,9 @@ interface AppState {
   user: AuthUser | null;
   updateUser: (patch: Partial<AuthUser>) => Promise<void>;
 
+  // 当前用户在线状态（基于 socket 连接状态，用于左栏头像状态指示）
+  myOnline: boolean;
+
   // 输入指示：conversationId → 是否对方正在输入
   typingMap: Record<string, boolean>;
 }
@@ -160,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sidebarOpen: false,
       incomingRequests: [],
       outgoingRequests: [],
+      myOnline: false,
     });
     // 登出后清空浏览器标签页徽章
     setUnreadBadge(0);
@@ -479,6 +484,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   typingMap: {},
+
+  myOnline: false,
 }));
 
 // 注册 401 处理器 — API 返回 401 时触发登出（跳转登录页）
@@ -587,6 +594,14 @@ function subscribeRealtime(
   get: () => AppState,
 ) {
   const currentUserId = get().user?.id;
+
+  // 注册 socket 连接状态回调 — 更新当前用户在线状态指示（左栏头像圆点）
+  registerConnectionChangeHandler((connected) => {
+    set({ myOnline: connected });
+  });
+  // 初始化：根据当前 socket 连接状态设置 myOnline
+  const sock = getSocket();
+  set({ myOnline: !!sock?.connected });
 
   // 新消息到达 → 追加到对应会话的消息列表
   onNewMessage((msg) => {
