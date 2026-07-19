@@ -131,7 +131,7 @@ export default function AddContact() {
         onBack={() => navigate("/contacts")}
       />
       <PageScroll className="px-6 py-6" maxWidth={960}>
-        <div style={{ maxWidth: 480 }} className="mx-auto">
+        <div>
           {/* 搜索区 */}
           <h2 className="font-heading text-[14px] font-semibold text-text-default mb-3">
             {t("addContact.addByUsername")}

@@ -1,19 +1,30 @@
 import { useTranslation } from "react-i18next";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, MessageSquare } from "lucide-react";
 import { AppLayout, PageScroll } from "@/components/AppLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar } from "@/components/Avatar";
 import { Input } from "@/components/Input";
 import { FilterPill } from "@/components/FilterPill";
+import { Modal } from "@/components/Modal";
+import { Button } from "@/components/Button";
 import { useAppStore } from "@/store";
 import type { NotificationItem } from "@/types";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "unread" | "mentions" | "reactions";
 
-/** 搜索与通知 — 过滤标签 + 时间分组 + 未读高亮 */
+/** 通知类型标签文案映射 */
+const typeLabelKey: Record<NotificationItem["type"], string> = {
+  message: "notifications.typeMessage",
+  mention: "notifications.typeMention",
+  reaction: "notifications.typeReaction",
+  group: "notifications.typeGroup",
+  system: "notifications.typeSystem",
+};
+
+/** 搜索与通知 — 过滤标签 + 时间分组 + 未读高亮 + 点击查看详情 */
 export default function SearchNotifications() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -23,12 +34,21 @@ export default function SearchNotifications() {
   const markRead = useAppStore((s) => s.markNotificationRead);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  // 当前展开详情的通知
+  const [detail, setDetail] = useState<NotificationItem | null>(null);
 
-  // 点击通知 → 标记已读并跳转到对应会话（按 actorName 匹配）
+  // 点击通知 → 标记已读 + 打开详情弹窗
   const handleNotificationClick = (n: NotificationItem) => {
     markRead(n.id);
-    const conv = conversations.find((c) => c.name === n.actorName);
+    setDetail(n);
+  };
+
+  // 跳转到对应会话（按 actorName 匹配）— 仅消息/提及/回复类型可用
+  const handleGoToConversation = () => {
+    if (!detail) return;
+    const conv = conversations.find((c) => c.name === detail.actorName);
     if (conv) {
+      setDetail(null);
       navigate(`/chat/${conv.id}`);
     }
   };
@@ -142,6 +162,65 @@ export default function SearchNotifications() {
           </div>
         )}
       </PageScroll>
+
+      {/* 通知详情弹窗 */}
+      <Modal
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        title={t("notifications.detailTitle")}
+        className="max-w-[480px]"
+      >
+        {detail && (
+          <div className="flex flex-col gap-4">
+            {/* 头部：头像 + 类型徽章 + 时间 */}
+            <div className="flex items-start gap-3">
+              <Avatar
+                initials={detail.actorInitials}
+                color={detail.actorColor}
+                size="lg"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[14px] font-semibold text-text-default truncate">
+                    {detail.actorName}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-soft text-brand font-medium flex-shrink-0">
+                    {t(typeLabelKey[detail.type])}
+                  </span>
+                </div>
+                <div className="text-[11px] text-text-tertiary">
+                  {detail.timestamp}
+                </div>
+              </div>
+            </div>
+
+            {/* 分隔线 */}
+            <div className="h-px bg-border-neutral" />
+
+            {/* 完整内容 */}
+            <div className="text-[13px] text-text-default leading-relaxed whitespace-pre-wrap break-words">
+              {renderContent(detail.content)}
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setDetail(null)}>
+                {t("common.close")}
+              </Button>
+              {["message", "mention", "reaction"].includes(detail.type) &&
+                conversations.some((c) => c.name === detail.actorName) && (
+                  <Button
+                    variant="primary"
+                    icon={<MessageSquare size={14} />}
+                    onClick={handleGoToConversation}
+                  >
+                    {t("notifications.goToConversation")}
+                  </Button>
+                )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </AppLayout>
   );
 }

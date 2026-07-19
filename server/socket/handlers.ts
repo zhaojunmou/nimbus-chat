@@ -137,17 +137,39 @@ export function registerSocketHandlers(io: IO) {
       clearTyping(io, socket, conversationId, userId);
     });
 
-    // 标记已读 → 广播回执
+    // 标记已读 → 广播回执（同时推送到对端会话，让发送方收到已读状态）
     socket.on("message:read", (conversationId) => {
       const ids = svc.markConversationRead(conversationId);
       const conv = db.conversations.find((c) => c.id === conversationId);
       // 仅推送给会话归属用户，避免污染其他用户的会话列表
       if (conv?.ownerId) io.to(`user:${conv.ownerId}`).emit("conversation:updated", conv);
       if (ids.length > 0) {
+        // 1) 本会话房间（接收方自己视图同步）
         io.to(`conv:${conversationId}`).emit("message:read", {
           conversationId,
           messageIds: ids,
         });
+        // 2) 对端会话房间（发送方收到已读回执，双勾变深）
+        // 注意：双方会话 id 不同，需找到对端会话并以对端 id 推送，
+        // 这样发送方 store 里 messagesByConv[对端id] 才能匹配更新
+        if (conv?.contactId && conv?.ownerId) {
+          const otherConv = db.conversations.find(
+            (c) => c.ownerId === conv.contactId && c.contactId === conv.ownerId,
+          );
+          if (otherConv) {
+            // 对端会话中对应的消息（发送方发的那些）也已被 markConversationRead 标记为 isRead
+            // 收集对端会话里 isSent=true 的消息 id（即发送方发的消息）
+            const otherMsgIds = db.messages
+              .filter((m) => m.conversationId === otherConv.id && m.isSent)
+              .map((m) => m.id);
+            if (otherMsgIds.length > 0) {
+              io.to(`conv:${otherConv.id}`).emit("message:read", {
+                conversationId: otherConv.id,
+                messageIds: otherMsgIds,
+              });
+            }
+          }
+        }
       }
     });
 

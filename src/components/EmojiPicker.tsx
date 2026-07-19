@@ -72,7 +72,9 @@ export function EmojiPicker({ onPick, onClose }: EmojiPickerProps) {
     onPick(item.content, item.isImage);
   };
 
-  // 添加图片自定义表情（压缩为 data URL）
+  // 添加图片自定义表情
+  // 规则：大小未超过阈值（默认 512KB）时不压缩，直接保留原 data URL；
+  //      超过阈值时静态图压缩并提示，动图（GIF/WebP/APNG）拒绝并提示使用更小文件。
   const handleImageSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -81,12 +83,26 @@ export function EmojiPicker({ onPick, onClose }: EmojiPickerProps) {
       e.target.value = "";
       return;
     }
+    const SIZE_LIMIT = 512 * 1024; // 512KB
+    const isAnimated =
+      file.type === "image/gif" ||
+      file.type === "image/webp" ||
+      file.type === "image/apng";
     try {
-      // GIF / WebP 动画走 canvas 压缩会丢失动画帧，直接保留原始 data URL
-      const isAnimated = file.type === "image/gif" || file.type === "image/webp" || file.type === "image/apng";
-      const dataUrl = isAnimated
-        ? await readFileAsDataUrl(file)
-        : await compressImage(file, 96, 0.8);
+      let dataUrl: string;
+      if (file.size <= SIZE_LIMIT) {
+        // 未超限：所有图片类型直接保留原始 data URL（保留动画帧、原图质量）
+        dataUrl = await readFileAsDataUrl(file);
+      } else if (isAnimated) {
+        // 动图超限：canvas 压缩会丢动画帧，直接拒绝
+        toast(t("emoji.animatedTooLarge", { limit: 512 }), "error");
+        e.target.value = "";
+        return;
+      } else {
+        // 静态图超限：压缩并提示
+        dataUrl = await compressImage(file, 96, 0.8);
+        toast(t("emoji.imageCompressed", { limit: 512 }), "info");
+      }
       const { list } = addCustomEmoji(customEmojis, dataUrl, file.name);
       persistCustom(list);
       toast(t("emoji.added"), "success");

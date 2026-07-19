@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  Camera,
   Check,
   ChevronRight,
   Crown,
@@ -9,6 +10,7 @@ import {
   LogOut,
   MessageCircle,
   Pencil,
+  Trash2,
   UserMinus,
   UserPlus,
   X,
@@ -24,6 +26,37 @@ import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store";
 import type { Contact } from "@/types";
 
+/** 压缩图片为方形 JPEG data URL（头像专用） */
+function compressAvatar(file: File, size: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.onload = () => {
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas not supported"));
+          return;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 /** 群聊详情 — 群信息头卡 + 成员列表 + 邀请/退出/移除/改名 */
 export default function GroupDetail() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +70,7 @@ export default function GroupDetail() {
   const leaveGroup = useAppStore((s) => s.leaveGroup);
   const removeGroupMember = useAppStore((s) => s.removeGroupMember);
   const updateGroupName = useAppStore((s) => s.updateGroupName);
+  const updateGroupAvatar = useAppStore((s) => s.updateGroupAvatar);
   const setActive = useAppStore((s) => s.setActiveConversation);
 
   // 本地会话副本（实时同步 memberIds/groupOwnerId 等）
@@ -49,6 +83,10 @@ export default function GroupDetail() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
+  // 群头像上传
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const groupId = conv?.contactId ?? id ?? "";
 
@@ -139,6 +177,42 @@ export default function GroupDetail() {
     }
   };
 
+  // 选择群头像文件 → 压缩 → 上传
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 允许重复选同一文件
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast(t("editProfile.avatarImageOnly"), "error");
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const dataUrl = await compressAvatar(file, 256, 0.85);
+      const ok = await updateGroupAvatar(groupId, dataUrl);
+      if (ok) {
+        toast(t("group.avatarUpdated"), "success");
+      } else {
+        toast(t("group.updateFailed", { error: "" }), "error");
+      }
+    } catch {
+      toast(t("editProfile.avatarUpdateFailed"), "error");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  // 移除群头像
+  const handleRemoveAvatar = async () => {
+    setConfirmRemoveAvatar(false);
+    const ok = await updateGroupAvatar(groupId, null);
+    if (ok) {
+      toast(t("group.avatarRemoved"), "success");
+    } else {
+      toast(t("group.updateFailed", { error: "" }), "error");
+    }
+  };
+
   if (!conv) {
     return (
       <AppLayout>
@@ -168,24 +242,63 @@ export default function GroupDetail() {
       <PageScroll className="px-6 py-6" maxWidth={960}>
         {/* 群信息头卡 */}
         <div className="flex flex-col items-center text-center mb-6">
-          <div
-            className="mb-4"
-            style={{ padding: 3, background: "var(--bg-brand)", borderRadius: "50%" }}
-          >
+          <div className="mb-4 relative inline-block leading-[0]">
             <div
-              style={{
-                padding: 3,
-                background: "var(--bg-base-default)",
-                borderRadius: "50%",
-              }}
+              className="inline-block leading-[0]"
+              style={{ padding: 3, background: "var(--bg-brand)", borderRadius: "50%" }}
             >
-              <Avatar
-                initials={conv.initials}
-                color={conv.color}
-                size="2xl"
-                imageUrl={conv.avatarUrl}
-              />
+              <div
+                className="inline-block leading-[0]"
+                style={{
+                  padding: 3,
+                  background: "var(--bg-base-default)",
+                  borderRadius: "50%",
+                }}
+              >
+                <Avatar
+                  initials={conv.initials}
+                  color={conv.color}
+                  size="2xl"
+                  imageUrl={conv.avatarUrl}
+                />
+              </div>
             </div>
+            {/* 群主可点击修改头像 — 相机角标 */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute bottom-1 right-1 inline-flex items-center justify-center w-7 h-7 rounded-full bg-bg-surface border border-border-neutral text-text-secondary hover:text-brand hover:border-brand cursor-pointer transition-colors duration-150 disabled:opacity-50"
+                aria-label={t("group.changeAvatar")}
+                title={t("group.changeAvatar")}
+              >
+                {avatarUploading ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Camera size={13} />
+                )}
+              </button>
+            )}
+            {/* 群主且已有自定义头像 — 移除按钮 */}
+            {isOwner && conv.avatarUrl && !avatarUploading && (
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveAvatar(true)}
+                className="absolute top-0 right-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-bg-surface border border-border-neutral text-status-error hover:bg-status-error/10 cursor-pointer transition-colors duration-150"
+                aria-label={t("group.removeAvatar")}
+                title={t("group.removeAvatar")}
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
           </div>
 
           {editingName ? (
@@ -426,6 +539,17 @@ export default function GroupDetail() {
         danger
         onConfirm={handleRemove}
         onCancel={() => setConfirmRemove(null)}
+      />
+
+      {/* 移除群头像确认 */}
+      <ConfirmDialog
+        open={confirmRemoveAvatar}
+        title={t("group.removeAvatar")}
+        message={t("group.removeAvatarConfirm")}
+        confirmLabel={t("common.delete")}
+        danger
+        onConfirm={handleRemoveAvatar}
+        onCancel={() => setConfirmRemoveAvatar(false)}
       />
     </AppLayout>
   );

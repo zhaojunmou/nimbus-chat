@@ -384,11 +384,17 @@ export function createApiRouter(
     res.json(result);
   });
 
-  // 更新群聊信息
+  // 更新群聊信息（名称/头像）
   apiRouter.patch("/groups/:id", (req: AuthedRequest, res: Response) => {
     const userId = getRequestUserId(req)!;
-    const { name } = req.body as { name?: string };
-    const result = svc.updateGroupInfo(req.params.id as string, userId, { name });
+    const { name, avatarUrl } = req.body as {
+      name?: string;
+      avatarUrl?: string | null;
+    };
+    const result = svc.updateGroupInfo(req.params.id as string, userId, {
+      name,
+      avatarUrl,
+    });
     if ("error" in result) {
       res.status(400).json({ error: result.error });
       return;

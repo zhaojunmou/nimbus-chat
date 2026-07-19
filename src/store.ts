@@ -69,6 +69,8 @@ interface AppState {
   // 消息（按会话 id 分组缓存）
   messagesByConv: Record<string, Message[]>;
   loadMessages: (conversationId: string) => Promise<void>;
+  /** 强制重新拉取会话消息（忽略本地缓存）— 用于通话结束等需要同步新消息的场景 */
+  reloadMessages: (conversationId: string) => Promise<void>;
   sendText: (conversationId: string, text: string) => boolean;
   sendImage: (conversationId: string, file: File) => Promise<boolean>;
   clearMessages: (conversationId: string) => Promise<void>;
@@ -94,6 +96,11 @@ interface AppState {
   removeGroupMember: (groupId: string, userId: string) => Promise<boolean>;
   leaveGroup: (groupId: string) => Promise<boolean>;
   updateGroupName: (groupId: string, name: string) => Promise<boolean>;
+  /** 更新群头像 — 仅群主可调用，传 null 清除头像 */
+  updateGroupAvatar: (
+    groupId: string,
+    avatarUrl: string | null,
+  ) => Promise<boolean>;
 
   // 移动端侧边栏抽屉
   sidebarOpen: boolean;
@@ -292,6 +299,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       loadingConvs.delete(conversationId);
     }
   },
+  reloadMessages: async (conversationId) => {
+    // 强制拉取，不检查缓存（用于通话结束同步新消息）
+    if (loadingConvs.has(conversationId)) return;
+    loadingConvs.add(conversationId);
+    try {
+      const list = await api.getMessages(conversationId);
+      set((s) => ({
+        messagesByConv: { ...s.messagesByConv, [conversationId]: list },
+      }));
+    } catch (err) {
+      console.error("[reloadMessages] failed for", conversationId, err);
+    } finally {
+      loadingConvs.delete(conversationId);
+    }
+  },
   sendText: (conversationId, text) => {
     // 检查 socket 连接状态，断开时拒绝发送并提示
     const sock = getSocket();
@@ -459,7 +481,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   updateGroupName: async (groupId, name) => {
     try {
-      const conv = await api.updateGroupInfo(groupId, name);
+      const conv = await api.updateGroupInfo(groupId, { name });
       set((s) => ({
         conversations: s.conversations.map((c) =>
           c.contactId === groupId
@@ -470,6 +492,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true;
     } catch (err) {
       console.error("[updateGroupName] failed:", err);
+      return false;
+    }
+  },
+  updateGroupAvatar: async (groupId, avatarUrl) => {
+    try {
+      const conv = await api.updateGroupInfo(groupId, { avatarUrl });
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.contactId === groupId
+            ? { ...c, avatarUrl: conv.avatarUrl }
+            : c,
+        ),
+      }));
+      return true;
+    } catch (err) {
+      console.error("[updateGroupAvatar] failed:", err);
       return false;
     }
   },
@@ -653,6 +691,7 @@ function subscribeRealtime(
                   ...c,
                   lastMessage: conv.lastMessage,
                   lastTime: conv.lastTime,
+                  lastTimestamp: conv.lastTimestamp ?? c.lastTimestamp,
                   unreadCount: active === conv.id ? 0 : conv.unreadCount,
                   isOnline: conv.isOnline,
                   isPinned: conv.isPinned ?? c.isPinned,

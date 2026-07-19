@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   MessageCircle,
@@ -39,7 +39,7 @@ export default function ContactProfile() {
   const [loading, setLoading] = useState(true);
 
   // 更多菜单
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; ready: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -70,8 +70,42 @@ export default function ContactProfile() {
 
   const handleMoreClick = (e: MouseEvent) => {
     e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY });
+    // 用按钮位置定位：菜单右边缘对齐按钮右边缘，顶部在按钮下方
+    // 实际尺寸校正交由下方 useLayoutEffect 处理，避免不同语言/内容宽度估算不准导致超出视口
+    const btn = e.currentTarget as HTMLButtonElement;
+    const r = btn.getBoundingClientRect();
+    const margin = 8;
+    const gap = 4;
+    const x = Math.max(margin, r.right - 200);
+    const y = r.bottom + gap;
+    setMenu({ x, y, ready: false });
   };
+
+  // 菜单挂载后按实际尺寸做边界校正，校正完成才显示（ready=true）
+  // 用 offsetWidth/offsetHeight 测量原始尺寸，避免受到入场动画 transform: scale() 影响
+  useLayoutEffect(() => {
+    if (!menu || menu.ready) return;
+    const el = menuRef.current;
+    if (!el) return;
+    const margin = 8;
+    const gap = 4;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let x = menu.x;
+    let y = menu.y;
+    if (x + w > window.innerWidth - margin) {
+      x = window.innerWidth - w - margin;
+    }
+    if (x < margin) x = margin;
+    if (y + h > window.innerHeight - margin) {
+      // 下方放不下 → 放按钮上方
+      const btnH = 32;
+      y = y - gap - h - btnH - gap;
+      if (y < margin) y = Math.max(margin, window.innerHeight - h - margin);
+    }
+    if (y < margin) y = margin;
+    setMenu({ x, y, ready: true });
+  }, [menu]);
 
   const handleBlock = async () => {
     setConfirmBlock(false);
@@ -176,8 +210,8 @@ export default function ContactProfile() {
       <PageScroll className="px-6 py-6" maxWidth={960}>
         {/* 资料头卡 */}
         <div className="flex flex-col items-center text-center mb-6">
-          <div className="mb-4" style={{ padding: 3, background: "var(--bg-brand)", borderRadius: "50%" }}>
-            <div style={{ padding: 3, background: "var(--bg-base-default)", borderRadius: "50%" }}>
+          <div className="mb-4 inline-block leading-[0]" style={{ padding: 3, background: "var(--bg-brand)", borderRadius: "50%" }}>
+            <div className="inline-block leading-[0]" style={{ padding: 3, background: "var(--bg-base-default)", borderRadius: "50%" }}>
               <Avatar
                 initials={contact.initials}
                 color={contact.color}
@@ -303,7 +337,7 @@ export default function ContactProfile() {
         <div
           ref={menuRef}
           className="fixed z-50 min-w-[180px] bg-bg-menu border border-border-neutral-2 rounded-[var(--radius-8)] py-1 shadow-menu animate-menu-in"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: menu.x, top: menu.y, visibility: menu.ready ? "visible" : "hidden" }}
         >
           <button
             type="button"

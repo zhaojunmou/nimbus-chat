@@ -26,6 +26,32 @@ import { useAppStore } from "@/store";
 import type { Contact } from "@/types";
 import { cn } from "@/lib/utils";
 
+/** 相对时间格式化：now / Xm / Xh / 昨天 / MM-DD / YYYY-MM-DD */
+function formatRelativeTime(iso?: string): string | null {
+  if (!iso) return null;
+  const ts = new Date(iso);
+  if (isNaN(ts.getTime())) return null;
+  const now = new Date();
+  const diffMin = Math.floor((now.getTime() - ts.getTime()) / 60000);
+  if (diffMin < 1) return "now";
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24 && now.getDate() === ts.getDate()) return `${diffHr}h`;
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (
+    yest.getDate() === ts.getDate() &&
+    yest.getMonth() === ts.getMonth() &&
+    yest.getFullYear() === ts.getFullYear()
+  ) {
+    return "Yesterday";
+  }
+  const sameYear = now.getFullYear() === ts.getFullYear();
+  const mm = String(ts.getMonth() + 1).padStart(2, "0");
+  const dd = String(ts.getDate()).padStart(2, "0");
+  return sameYear ? `${mm}-${dd}` : `${ts.getFullYear()}-${mm}-${dd}`;
+}
+
 /** 上下文菜单项 */
 interface MenuItem {
   label: string;
@@ -52,6 +78,13 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
   const incomingRequests = useAppStore((s) => s.incomingRequests);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const { toast } = useToast();
+
+  // 定时刷新相对时间（now → 1m → 5m …），每 30s 触发一次重新渲染
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 会话搜索
   const [searchQuery, setSearchQuery] = useState("");
@@ -331,7 +364,7 @@ export function Sidebar({ showOnMobile = false }: { showOnMobile?: boolean }) {
                     {c.name}
                   </span>
                   <span className="text-[10px] text-text-tertiary flex-shrink-0 ml-2">
-                    {c.lastTime}
+                    {formatRelativeTime(c.lastTimestamp) ?? c.lastTime}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

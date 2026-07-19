@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, MessageCircle } from "lucide-react";
+import { Plus, Search, MessageCircle, Phone, Pencil } from "lucide-react";
 import { AppLayout, PageScroll } from "@/components/AppLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar } from "@/components/Avatar";
@@ -151,18 +151,54 @@ export default function ContactsManagement() {
                     {c.lastSeen}
                   </span>
                 </div>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    ensureConversation(c.id).then((conv) => navigate(`/chat/${conv.id}`));
-                  }}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-tertiary hover:bg-[var(--bg-overlay-l3)] hover:text-brand cursor-pointer transition-colors duration-150"
-                  aria-label={t("contacts.sendMessage")}
-                >
-                  <MessageCircle size={16} />
-                </span>
+                {/* 操作按钮组：编辑 / 通话 / 发消息 */}
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(c.isGroup ? `/groups/${c.id}` : `/contacts/${c.id}`);
+                    }}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-tertiary hover:bg-[var(--bg-overlay-l3)] hover:text-brand cursor-pointer transition-colors duration-150"
+                    aria-label={t("contacts.edit")}
+                    title={t("contacts.edit")}
+                  >
+                    <Pencil size={15} />
+                  </span>
+                  {!c.isGroup && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        ensureConversation(c.id).then((conv) =>
+                          navigate(`/call/${conv.id}`),
+                        );
+                      }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-tertiary hover:bg-[var(--bg-overlay-l3)] hover:text-brand cursor-pointer transition-colors duration-150"
+                      aria-label={t("call.call")}
+                      title={t("call.call")}
+                    >
+                      <Phone size={15} />
+                    </span>
+                  )}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      ensureConversation(c.id).then((conv) =>
+                        navigate(`/chat/${conv.id}`),
+                      );
+                    }}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-[var(--radius-6)] text-text-tertiary hover:bg-[var(--bg-overlay-l3)] hover:text-brand cursor-pointer transition-colors duration-150"
+                    aria-label={t("contacts.sendMessage")}
+                    title={t("contacts.sendMessage")}
+                  >
+                    <MessageCircle size={16} />
+                  </span>
+                </div>
               </button>
             ))}
           </div>

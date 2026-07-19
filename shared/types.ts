@@ -18,6 +18,8 @@ export interface Conversation {
   color: AvatarColor;
   lastMessage: string;
   lastTime: string;
+  /** 最后一条消息的时间戳（ISO 字符串），用于侧边栏实时格式化相对时间 */
+  lastTimestamp?: string;
   unreadCount: number;
   isOnline: boolean;
   isPinned?: boolean;
@@ -55,7 +57,13 @@ export interface Message {
   /** 通话记录 — 存在时渲染为通话记录卡片 */
   call?: {
     /** 通话结果状态 */
-    status: "completed" | "rejected" | "missed" | "failed" | "busy";
+    status:
+      | "completed"
+      | "rejected"
+      | "missed"
+      | "failed"
+      | "busy"
+      | "cancelled";
     /** 通话时长（秒）— 仅 completed 有意义 */
     duration?: number;
     /** 是否为发起方 */

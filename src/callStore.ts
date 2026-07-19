@@ -231,7 +231,13 @@ function sendCallRecord(finalStatus: CallStatus) {
   const { conversationId } = useCallStore.getState();
   if (!conversationId) return;
 
-  let callStatus: "completed" | "rejected" | "missed" | "failed" | "busy";
+  let callStatus:
+    | "completed"
+    | "rejected"
+    | "missed"
+    | "failed"
+    | "busy"
+    | "cancelled";
   let duration: number | undefined;
 
   if (callStartTime !== null) {
@@ -243,8 +249,8 @@ function sendCallRecord(finalStatus: CallStatus) {
   } else if (finalStatus === "failed") {
     callStatus = "failed";
   } else {
-    // ended 但未接通 → missed（呼叫方取消或对方未接听）
-    callStatus = "missed";
+    // ended 但未接通 → 呼叫方主动取消（被叫方视角显示为"未接来电"）
+    callStatus = "cancelled";
   }
 
   try {
@@ -253,6 +259,18 @@ function sendCallRecord(finalStatus: CallStatus) {
       duration,
       isCaller,
     });
+    // 通话记录消息通过 socket emit 异步处理，后端持久化后才能在 REST 拉取到。
+    // 用户从 VoiceCall 导航回聊天页时，ConversationDetail 会 loadMessages，
+    // 但本地 messagesByConv 缓存命中会跳过拉取，导致新通话记录不显示。
+    // 这里在 emit 后稍等再强制 reload 该会话消息，确保 UI 同步。
+    // 用动态 import 避免与 store.ts 形成循环依赖。
+    setTimeout(() => {
+      import("./store").then(({ useAppStore }) => {
+        useAppStore.getState().reloadMessages(conversationId);
+      }).catch((err) => {
+        console.warn("[call] reloadMessages after sendCallRecord failed:", err);
+      });
+    }, 400);
   } catch (err) {
     console.warn("[call] sendCallRecord failed:", err);
   }

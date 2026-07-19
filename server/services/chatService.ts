@@ -67,9 +67,30 @@ function now(): string {
   });
 }
 
-/** 相对时间简写 */
-function relativeTime(): string {
-  return "now";
+/** 相对时间简写：基于时间戳生成 now / Xm / Xh / Yesterday / MM-DD */
+function relativeTime(ts: Date = new Date()): string {
+  const now = new Date();
+  const diffMs = now.getTime() - ts.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "now";
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24 && now.getDate() === ts.getDate()) return `${diffHr}h`;
+  // 昨天
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (
+    yest.getDate() === ts.getDate() &&
+    yest.getMonth() === ts.getMonth() &&
+    yest.getFullYear() === ts.getFullYear()
+  ) {
+    return "Yesterday";
+  }
+  // 同年显示 MM-DD，跨年显示 YYYY-MM-DD
+  const sameYear = now.getFullYear() === ts.getFullYear();
+  const mm = String(ts.getMonth() + 1).padStart(2, "0");
+  const dd = String(ts.getDate()).padStart(2, "0");
+  return sameYear ? `${mm}-${dd}` : `${ts.getFullYear()}-${mm}-${dd}`;
 }
 
 /** 创建并保存一条新消息，返回 (message, updatedConversation) */
@@ -106,7 +127,9 @@ export function createMessage(
   // 更新会话的最后消息与时间（图片消息显示 📷 占位，通话消息显示 📞 占位）
   const preview = imageUrl ? "📷 Photo" : call ? "📞 Call" : text;
   conv.lastMessage = isSent ? preview : `${conv.name.split(" ")[0]}: ${preview}`;
-  conv.lastTime = relativeTime();
+  const ts = new Date(message.createdAt);
+  conv.lastTime = relativeTime(ts);
+  conv.lastTimestamp = ts.toISOString();
 
   persistDb();
 
@@ -165,7 +188,9 @@ export function createRecipientMessage(
   // 更新接收方会话最后消息与未读数（图片消息显示 📷 占位，通话消息显示 📞 占位）
   const preview = imageUrl ? "📷 Photo" : call ? "📞 Call" : text;
   conv.lastMessage = `${senderName.split(" ")[0]}: ${preview}`;
-  conv.lastTime = relativeTime();
+  const ts = new Date(timestamp);
+  conv.lastTime = relativeTime(ts);
+  conv.lastTimestamp = ts.toISOString();
   conv.unreadCount = (conv.unreadCount ?? 0) + 1;
 
   persistDb();
@@ -919,11 +944,11 @@ export function leaveGroup(
   return { ok: true };
 }
 
-/** 更新群聊信息（名称等，仅群主/管理员可操作） */
+/** 更新群聊信息（名称/头像，仅群主/管理员可操作） */
 export function updateGroupInfo(
   groupId: string,
   operatorId: string,
-  patch: { name?: string },
+  patch: { name?: string; avatarUrl?: string | null },
 ): Conversation | { error: string } {
   const group = db.contacts.find((c) => c.id === groupId);
   if (!group?.isGroup) return { error: "Group not found" };
@@ -940,12 +965,24 @@ export function updateGroupInfo(
     group.initials = trimmed.slice(0, 2).toUpperCase();
   }
 
-  // 同步所有成员会话的名称
+  // 头像更新：传 null 表示清除，传 string 表示设置新头像
+  if (patch.avatarUrl !== undefined) {
+    if (patch.avatarUrl === null) {
+      group.avatarUrl = undefined;
+    } else {
+      group.avatarUrl = patch.avatarUrl;
+    }
+  }
+
+  // 同步所有成员会话的名称与头像
   for (const conv of db.conversations) {
     if (conv.contactId === groupId && conv.isGroup) {
       if (patch.name) {
         conv.name = group.name;
         conv.initials = group.initials;
+      }
+      if (patch.avatarUrl !== undefined) {
+        conv.avatarUrl = group.avatarUrl;
       }
     }
   }

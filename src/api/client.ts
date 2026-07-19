@@ -166,8 +166,10 @@ export const api = {
   removeGroupMember: (groupId: string, userId: string) =>
     del<Conversation>(`/groups/${groupId}/members/${userId}`),
   leaveGroup: (groupId: string) => post<{ ok: boolean }>(`/groups/${groupId}/leave`),
-  updateGroupInfo: (groupId: string, name: string) =>
-    patchReq<Conversation>(`/groups/${groupId}`, { name }),
+  updateGroupInfo: (
+    groupId: string,
+    patch: { name?: string; avatarUrl?: string | null },
+  ) => patchReq<Conversation>(`/groups/${groupId}`, patch),
 
   // ── 版本 ──
   getVersion: () => get<{ version: string }>("/version"),

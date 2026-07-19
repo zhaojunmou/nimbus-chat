@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -10,6 +10,7 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Send,
+  Check,
   CheckCheck,
   Pin,
   BellOff,
@@ -19,7 +20,6 @@ import {
   UserCircle,
   Smile,
   X,
-  Phone,
   PhoneMissed,
   PhoneIncoming,
   PhoneOutgoing,
@@ -78,7 +78,7 @@ export default function ConversationDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 更多菜单
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; ready: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 清空/删除确认
@@ -254,22 +254,44 @@ export default function ConversationDetail() {
 
   const handleMoreClick = (e: MouseEvent) => {
     e.preventDefault();
-    // 菜单边界检查 — 防止超出视口右侧/下侧
-    const MENU_W = 180;
-    const MENU_H = 220;
+    // 用按钮位置定位：菜单右边缘对齐按钮右边缘，顶部在按钮下方
+    // 实际尺寸校正交由下方 useLayoutEffect 处理，避免不同语言/内容宽度估算不准导致超出视口
+    const btn = e.currentTarget as HTMLButtonElement;
+    const r = btn.getBoundingClientRect();
     const margin = 8;
-    let x = e.clientX;
-    let y = e.clientY;
-    if (x + MENU_W > window.innerWidth - margin) {
-      x = window.innerWidth - MENU_W - margin;
-    }
-    if (y + MENU_H > window.innerHeight - margin) {
-      y = window.innerHeight - MENU_H - margin;
+    const gap = 4;
+    // 初始位置先放在按钮左下方，并标记 ready=false 隐藏（避免估算位置不准导致闪烁/超出）
+    const x = Math.max(margin, r.right - 200);
+    const y = r.bottom + gap;
+    setMenu({ x, y, ready: false });
+  };
+
+  // 菜单挂载后按实际尺寸做边界校正，校正完成才显示（ready=true）
+  // 用 offsetWidth/offsetHeight 测量原始尺寸，避免受到入场动画 transform: scale() 影响
+  useLayoutEffect(() => {
+    if (!menu || menu.ready) return;
+    const el = menuRef.current;
+    if (!el) return;
+    const margin = 8;
+    const gap = 4;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let x = menu.x;
+    let y = menu.y;
+    // 右边缘对齐按钮：菜单右边缘不超过视口右边
+    if (x + w > window.innerWidth - margin) {
+      x = window.innerWidth - w - margin;
     }
     if (x < margin) x = margin;
+    if (y + h > window.innerHeight - margin) {
+      // 下方放不下 → 放按钮上方
+      const btnH = 32;
+      y = y - gap - h - btnH - gap;
+      if (y < margin) y = Math.max(margin, window.innerHeight - h - margin);
+    }
     if (y < margin) y = margin;
-    setMenu({ x, y });
-  };
+    setMenu({ x, y, ready: true });
+  }, [menu]);
 
   const isTyping = !!typingMap[conv.id];
 
@@ -348,12 +370,15 @@ export default function ConversationDetail() {
                 const isRejected = call.status === "rejected";
                 const isFailed = call.status === "failed";
                 const isCompleted = call.status === "completed";
-                // 图标选择
-                const CallIcon = isMissed || isFailed
-                  ? PhoneMissed
-                  : call.isCaller
-                    ? PhoneOutgoing
-                    : PhoneIncoming;
+                const isCancelled = call.status === "cancelled";
+                // 图标选择：未接/失败/取消(被叫视角) 用 PhoneMissed；
+                // 呼叫方主动取消用 PhoneOutgoing；其余按方向
+                const CallIcon =
+                  isMissed || isFailed || (isCancelled && !call.isCaller)
+                    ? PhoneMissed
+                    : call.isCaller
+                      ? PhoneOutgoing
+                      : PhoneIncoming;
                 // 状态文案
                 const statusText = (() => {
                   switch (call.status) {
@@ -369,6 +394,11 @@ export default function ConversationDetail() {
                       return t("call.recordFailed");
                     case "busy":
                       return t("call.recordBusy");
+                    case "cancelled":
+                      // 呼叫方视角：已取消；被叫方视角：未接来电
+                      return call.isCaller
+                        ? t("call.recordCancelled")
+                        : t("call.recordMissed");
                     default:
                       return t("call.recordMissed");
                   }
@@ -385,15 +415,15 @@ export default function ConversationDetail() {
                   <button
                     type="button"
                     onClick={() => conv && navigate(`/call/${conv.id}`)}
-                    className="group flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--radius-10)] border border-border-neutral-2 bg-bg-surface hover:bg-[var(--bg-overlay-l2)] cursor-pointer transition-colors duration-150 max-w-[80%]"
+                    className="group flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--radius-10)] border border-border-neutral-2 bg-bg-surface hover:bg-[var(--bg-overlay-l2)] cursor-pointer transition-colors duration-150 w-[240px]"
                     aria-label={t("call.redial")}
                   >
                     <span
                       className={cn(
                         "inline-flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0",
-                        isMissed || isFailed
+                        isMissed || isFailed || (isCancelled && !call.isCaller)
                           ? "bg-status-error/15 text-status-error"
-                          : isRejected
+                          : isRejected || (isCancelled && call.isCaller)
                             ? "bg-amber-500/15 text-amber-500"
                             : "bg-brand/15 text-brand",
                       )}
@@ -404,9 +434,9 @@ export default function ConversationDetail() {
                       <span
                         className={cn(
                           "text-[12px] font-medium truncate",
-                          isMissed || isFailed
+                          isMissed || isFailed || (isCancelled && !call.isCaller)
                             ? "text-status-error"
-                            : isRejected
+                            : isRejected || (isCancelled && call.isCaller)
                               ? "text-amber-500"
                               : "text-text-default",
                         )}
@@ -420,10 +450,6 @@ export default function ConversationDetail() {
                         <span>{m.timestamp}</span>
                       </span>
                     </div>
-                    <Phone
-                      size={14}
-                      className="text-text-tertiary group-hover:text-brand transition-colors flex-shrink-0"
-                    />
                   </button>
                 );
                 // 发送方 → 右对齐
@@ -500,14 +526,16 @@ export default function ConversationDetail() {
                         <span className="text-[10px] text-text-onbrand/70">
                           {m.timestamp}
                         </span>
-                        <CheckCheck
-                          size={13}
-                          className={
-                            m.isRead
-                              ? "text-text-onbrand"
-                              : "text-text-onbrand/50"
-                          }
-                        />
+                        {m.isRead ? (
+                          // 已读 — 深色双勾
+                          <CheckCheck size={13} className="text-text-onbrand" />
+                        ) : conv.isOnline ? (
+                          // 已送达（对方在线但未读）— 浅色双勾
+                          <CheckCheck size={13} className="text-text-onbrand/50" />
+                        ) : (
+                          // 仅已发送（对方离线，未送达）— 单勾
+                          <Check size={13} className="text-text-onbrand/50" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -668,7 +696,7 @@ export default function ConversationDetail() {
         <div
           ref={menuRef}
           className="fixed z-50 min-w-[180px] bg-bg-menu border border-border-neutral-2 rounded-[var(--radius-8)] py-1 shadow-menu animate-menu-in"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: menu.x, top: menu.y, visibility: menu.ready ? "visible" : "hidden" }}
         >
           <MenuItem icon={conv.isPinned ? Pin : Pin} label={conv.isPinned ? t("chat.unpin") : t("chat.pin")} onClick={handlePin} />
           <MenuItem icon={conv.isMuted ? Bell : BellOff} label={conv.isMuted ? t("chat.unmute") : t("chat.mute")} onClick={handleMute} />

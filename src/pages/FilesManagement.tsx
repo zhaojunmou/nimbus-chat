@@ -201,6 +201,11 @@ export default function FilesManagement() {
         return t("call.recordFailed");
       case "busy":
         return t("call.recordBusy");
+      case "cancelled":
+        // 呼叫方视角：已取消；被叫方视角：未接来电
+        return call.isCaller
+          ? t("call.recordCancelled")
+          : t("call.recordMissed");
       default:
         return t("call.recordMissed");
     }
@@ -219,7 +224,7 @@ export default function FilesManagement() {
   return (
     <AppLayout>
       <PageHeader title={t("files.title")} onBack={() => navigate("/")} />
-      <PageScroll className="px-6 py-6" maxWidth={1100}>
+      <PageScroll className="px-6 py-6" maxWidth={960}>
         {/* 筛选与搜索 */}
         <Card className="mb-4">
           {/* 类型筛选 Tab */}
